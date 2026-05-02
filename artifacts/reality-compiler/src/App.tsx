@@ -6,6 +6,7 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import Sessions from "@/pages/sessions";
 import SessionWorkspace from "@/pages/session-workspace";
+import About from "@/pages/about";
 import { Navbar } from "@/components/navbar";
 
 const queryClient = new QueryClient();
@@ -19,6 +20,7 @@ function Router() {
           <Route path="/" component={Home} />
           <Route path="/sessions" component={Sessions} />
           <Route path="/sessions/:id" component={SessionWorkspace} />
+          <Route path="/about" component={About} />
           <Route component={NotFound} />
         </Switch>
       </main>
