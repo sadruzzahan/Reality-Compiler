@@ -16,6 +16,12 @@ tags:
     description: Conversational design messages
   - name: stats
     description: Aggregate session statistics
+  - name: suppliers
+    description: Manufacturing supplier network
+  - name: quotes
+    description: Manufacturing quotes for design sessions
+  - name: orders
+    description: Manufacturing orders
 paths:
   /healthz:
     get:
@@ -157,6 +163,204 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DesignSession"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /suppliers:
+    get:
+      operationId: listSuppliers
+      tags: [suppliers]
+      summary: List manufacturing suppliers
+      parameters:
+        - in: query
+          name: capability
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Suppliers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Supplier"
+
+  /suppliers/{id}:
+    get:
+      operationId: getSupplier
+      tags: [suppliers]
+      summary: Get a single supplier
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Supplier
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Supplier"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{id}/quotes:
+    get:
+      operationId: listQuotes
+      tags: [quotes]
+      summary: List existing quotes for a session
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Quotes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Quote"
+    post:
+      operationId: generateQuotes
+      tags: [quotes]
+      summary: Generate manufacturing quotes for a session
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: Generated quotes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Quote"
+        "400":
+          description: Session not ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /orders:
+    get:
+      operationId: listOrders
+      tags: [orders]
+      summary: List all orders
+      responses:
+        "200":
+          description: Orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OrderSummary"
+    post:
+      operationId: placeOrder
+      tags: [orders]
+      summary: Place a new manufacturing order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaceOrderInput"
+      responses:
+        "201":
+          description: Order placed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Quote not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /orders/{id}:
+    get:
+      operationId: getOrder
+      tags: [orders]
+      summary: Get a single order with full detail
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /orders/{id}/advance:
+    post:
+      operationId: advanceOrder
+      tags: [orders]
+      summary: Advance the order to the next manufacturing status
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          description: Already at terminal state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Not found
           content:
@@ -443,3 +647,288 @@ components:
         - topMaterials
         - topCategories
         - recentSessions
+
+    Supplier:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        name:
+          type: string
+        tagline:
+          type: string
+        description:
+          type: string
+        location:
+          type: string
+        country:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        materials:
+          type: array
+          items:
+            type: string
+        certifications:
+          type: array
+          items:
+            type: string
+        leadTimeMinDays:
+          type: integer
+        leadTimeMaxDays:
+          type: integer
+        pricingMultiplier:
+          type: number
+        setupFee:
+          type: number
+        rating:
+          type: number
+        capacityLevel:
+          type: string
+          enum: [low, medium, high]
+      required:
+        - id
+        - slug
+        - name
+        - tagline
+        - description
+        - location
+        - country
+        - capabilities
+        - materials
+        - certifications
+        - leadTimeMinDays
+        - leadTimeMaxDays
+        - pricingMultiplier
+        - setupFee
+        - rating
+        - capacityLevel
+
+    ProcessBreakdownItem:
+      type: object
+      properties:
+        process:
+          type: string
+        description:
+          type: string
+        cost:
+          type: number
+      required:
+        - process
+        - description
+        - cost
+
+    QuoteScoreFactors:
+      type: object
+      properties:
+        processMatch:
+          type: number
+        materialMatch:
+          type: number
+        leadTime:
+          type: number
+        rating:
+          type: number
+        total:
+          type: number
+      required:
+        - processMatch
+        - materialMatch
+        - leadTime
+        - rating
+        - total
+
+    Quote:
+      type: object
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+        supplier:
+          $ref: "#/components/schemas/Supplier"
+        unitCost:
+          type: number
+        setupFee:
+          type: number
+        totalCost:
+          type: number
+        leadTimeDays:
+          type: integer
+        processBreakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProcessBreakdownItem"
+        scoreFactors:
+          $ref: "#/components/schemas/QuoteScoreFactors"
+        rank:
+          type: integer
+        notes:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - sessionId
+        - supplier
+        - unitCost
+        - setupFee
+        - totalCost
+        - leadTimeDays
+        - processBreakdown
+        - scoreFactors
+        - rank
+        - notes
+        - createdAt
+
+    ShippingAddress:
+      type: object
+      properties:
+        recipient:
+          type: string
+        line1:
+          type: string
+        line2:
+          type: ["string", "null"]
+        city:
+          type: string
+        region:
+          type: string
+        postalCode:
+          type: string
+        country:
+          type: string
+      required:
+        - recipient
+        - line1
+        - city
+        - region
+        - postalCode
+        - country
+
+    PlaceOrderInput:
+      type: object
+      properties:
+        quoteId:
+          type: integer
+        quantity:
+          type: integer
+          minimum: 1
+        shippingAddress:
+          $ref: "#/components/schemas/ShippingAddress"
+      required:
+        - quoteId
+        - quantity
+        - shippingAddress
+
+    OrderStatusEvent:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [queued, in_production, quality_check, shipped, delivered]
+        note:
+          type: string
+        at:
+          type: string
+          format: date-time
+      required:
+        - status
+        - note
+        - at
+
+    OrderSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+        sessionTitle:
+          type: string
+        productName:
+          type: ["string", "null"]
+        supplierName:
+          type: string
+        status:
+          type: string
+          enum: [queued, in_production, quality_check, shipped, delivered]
+        quantity:
+          type: integer
+        totalCost:
+          type: number
+        leadTimeDays:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - sessionId
+        - sessionTitle
+        - supplierName
+        - status
+        - quantity
+        - totalCost
+        - leadTimeDays
+        - createdAt
+        - updatedAt
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+        sessionTitle:
+          type: string
+        productName:
+          type: ["string", "null"]
+        quote:
+          $ref: "#/components/schemas/Quote"
+        supplier:
+          $ref: "#/components/schemas/Supplier"
+        quantity:
+          type: integer
+        totalCost:
+          type: number
+        leadTimeDays:
+          type: integer
+        shippingAddress:
+          $ref: "#/components/schemas/ShippingAddress"
+        status:
+          type: string
+          enum: [queued, in_production, quality_check, shipped, delivered]
+        statusHistory:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderStatusEvent"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - sessionId
+        - sessionTitle
+        - quote
+        - supplier
+        - quantity
+        - totalCost
+        - leadTimeDays
+        - shippingAddress
+        - status
+        - statusHistory
+        - createdAt
+        - updatedAt

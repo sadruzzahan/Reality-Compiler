@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { Hexagon, ListTree, BookOpen } from "lucide-react";
+import { Hexagon, ListTree, BookOpen, Factory, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function Navbar() {
@@ -15,6 +15,14 @@ export function Navbar() {
             <Link href="/sessions" className="transition-colors hover:text-foreground/80 text-foreground/60 flex items-center gap-2" data-testid="link-sessions">
               <ListTree className="w-4 h-4" />
               Sessions
+            </Link>
+            <Link href="/suppliers" className="transition-colors hover:text-foreground/80 text-foreground/60 flex items-center gap-2" data-testid="link-suppliers">
+              <Factory className="w-4 h-4" />
+              Suppliers
+            </Link>
+            <Link href="/orders" className="transition-colors hover:text-foreground/80 text-foreground/60 flex items-center gap-2" data-testid="link-orders">
+              <Truck className="w-4 h-4" />
+              Orders
             </Link>
             <Link href="/about" className="transition-colors hover:text-foreground/80 text-foreground/60 flex items-center gap-2" data-testid="link-about">
               <BookOpen className="w-4 h-4" />

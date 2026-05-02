@@ -24,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
+import { QuotesPanel } from "@/components/quotes-panel";
 
 export default function SessionWorkspace() {
   const { id } = useParams();
@@ -327,6 +328,9 @@ export default function SessionWorkspace() {
                 )}
               </div>
             </div>
+          )}
+          {!isLoading && !isGenerating && session?.status === "ready" && output && (
+            <QuotesPanel sessionId={sessionId} />
           )}
         </div>
 

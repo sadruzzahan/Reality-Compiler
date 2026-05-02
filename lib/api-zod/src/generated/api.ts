@@ -224,3 +224,375 @@ export const SendMessageResponse = zod.object({
     zod.null(),
   ]),
 });
+
+/**
+ * @summary List manufacturing suppliers
+ */
+export const ListSuppliersQueryParams = zod.object({
+  capability: zod.coerce.string().optional(),
+});
+
+export const ListSuppliersResponseItem = zod.object({
+  id: zod.number(),
+  slug: zod.string(),
+  name: zod.string(),
+  tagline: zod.string(),
+  description: zod.string(),
+  location: zod.string(),
+  country: zod.string(),
+  capabilities: zod.array(zod.string()),
+  materials: zod.array(zod.string()),
+  certifications: zod.array(zod.string()),
+  leadTimeMinDays: zod.number(),
+  leadTimeMaxDays: zod.number(),
+  pricingMultiplier: zod.number(),
+  setupFee: zod.number(),
+  rating: zod.number(),
+  capacityLevel: zod.enum(["low", "medium", "high"]),
+});
+export const ListSuppliersResponse = zod.array(ListSuppliersResponseItem);
+
+/**
+ * @summary Get a single supplier
+ */
+export const GetSupplierParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetSupplierResponse = zod.object({
+  id: zod.number(),
+  slug: zod.string(),
+  name: zod.string(),
+  tagline: zod.string(),
+  description: zod.string(),
+  location: zod.string(),
+  country: zod.string(),
+  capabilities: zod.array(zod.string()),
+  materials: zod.array(zod.string()),
+  certifications: zod.array(zod.string()),
+  leadTimeMinDays: zod.number(),
+  leadTimeMaxDays: zod.number(),
+  pricingMultiplier: zod.number(),
+  setupFee: zod.number(),
+  rating: zod.number(),
+  capacityLevel: zod.enum(["low", "medium", "high"]),
+});
+
+/**
+ * @summary List existing quotes for a session
+ */
+export const ListQuotesParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ListQuotesResponseItem = zod.object({
+  id: zod.number(),
+  sessionId: zod.number(),
+  supplier: zod.object({
+    id: zod.number(),
+    slug: zod.string(),
+    name: zod.string(),
+    tagline: zod.string(),
+    description: zod.string(),
+    location: zod.string(),
+    country: zod.string(),
+    capabilities: zod.array(zod.string()),
+    materials: zod.array(zod.string()),
+    certifications: zod.array(zod.string()),
+    leadTimeMinDays: zod.number(),
+    leadTimeMaxDays: zod.number(),
+    pricingMultiplier: zod.number(),
+    setupFee: zod.number(),
+    rating: zod.number(),
+    capacityLevel: zod.enum(["low", "medium", "high"]),
+  }),
+  unitCost: zod.number(),
+  setupFee: zod.number(),
+  totalCost: zod.number(),
+  leadTimeDays: zod.number(),
+  processBreakdown: zod.array(
+    zod.object({
+      process: zod.string(),
+      description: zod.string(),
+      cost: zod.number(),
+    }),
+  ),
+  scoreFactors: zod.object({
+    processMatch: zod.number(),
+    materialMatch: zod.number(),
+    leadTime: zod.number(),
+    rating: zod.number(),
+    total: zod.number(),
+  }),
+  rank: zod.number(),
+  notes: zod.string(),
+  createdAt: zod.coerce.date(),
+});
+export const ListQuotesResponse = zod.array(ListQuotesResponseItem);
+
+/**
+ * @summary Generate manufacturing quotes for a session
+ */
+export const GenerateQuotesParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary List all orders
+ */
+export const ListOrdersResponseItem = zod.object({
+  id: zod.number(),
+  sessionId: zod.number(),
+  sessionTitle: zod.string(),
+  productName: zod.string().nullish(),
+  supplierName: zod.string(),
+  status: zod.enum([
+    "queued",
+    "in_production",
+    "quality_check",
+    "shipped",
+    "delivered",
+  ]),
+  quantity: zod.number(),
+  totalCost: zod.number(),
+  leadTimeDays: zod.number(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListOrdersResponse = zod.array(ListOrdersResponseItem);
+
+/**
+ * @summary Place a new manufacturing order
+ */
+
+export const PlaceOrderBody = zod.object({
+  quoteId: zod.number(),
+  quantity: zod.number().min(1),
+  shippingAddress: zod.object({
+    recipient: zod.string(),
+    line1: zod.string(),
+    line2: zod.string().nullish(),
+    city: zod.string(),
+    region: zod.string(),
+    postalCode: zod.string(),
+    country: zod.string(),
+  }),
+});
+
+/**
+ * @summary Get a single order with full detail
+ */
+export const GetOrderParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetOrderResponse = zod.object({
+  id: zod.number(),
+  sessionId: zod.number(),
+  sessionTitle: zod.string(),
+  productName: zod.string().nullish(),
+  quote: zod.object({
+    id: zod.number(),
+    sessionId: zod.number(),
+    supplier: zod.object({
+      id: zod.number(),
+      slug: zod.string(),
+      name: zod.string(),
+      tagline: zod.string(),
+      description: zod.string(),
+      location: zod.string(),
+      country: zod.string(),
+      capabilities: zod.array(zod.string()),
+      materials: zod.array(zod.string()),
+      certifications: zod.array(zod.string()),
+      leadTimeMinDays: zod.number(),
+      leadTimeMaxDays: zod.number(),
+      pricingMultiplier: zod.number(),
+      setupFee: zod.number(),
+      rating: zod.number(),
+      capacityLevel: zod.enum(["low", "medium", "high"]),
+    }),
+    unitCost: zod.number(),
+    setupFee: zod.number(),
+    totalCost: zod.number(),
+    leadTimeDays: zod.number(),
+    processBreakdown: zod.array(
+      zod.object({
+        process: zod.string(),
+        description: zod.string(),
+        cost: zod.number(),
+      }),
+    ),
+    scoreFactors: zod.object({
+      processMatch: zod.number(),
+      materialMatch: zod.number(),
+      leadTime: zod.number(),
+      rating: zod.number(),
+      total: zod.number(),
+    }),
+    rank: zod.number(),
+    notes: zod.string(),
+    createdAt: zod.coerce.date(),
+  }),
+  supplier: zod.object({
+    id: zod.number(),
+    slug: zod.string(),
+    name: zod.string(),
+    tagline: zod.string(),
+    description: zod.string(),
+    location: zod.string(),
+    country: zod.string(),
+    capabilities: zod.array(zod.string()),
+    materials: zod.array(zod.string()),
+    certifications: zod.array(zod.string()),
+    leadTimeMinDays: zod.number(),
+    leadTimeMaxDays: zod.number(),
+    pricingMultiplier: zod.number(),
+    setupFee: zod.number(),
+    rating: zod.number(),
+    capacityLevel: zod.enum(["low", "medium", "high"]),
+  }),
+  quantity: zod.number(),
+  totalCost: zod.number(),
+  leadTimeDays: zod.number(),
+  shippingAddress: zod.object({
+    recipient: zod.string(),
+    line1: zod.string(),
+    line2: zod.string().nullish(),
+    city: zod.string(),
+    region: zod.string(),
+    postalCode: zod.string(),
+    country: zod.string(),
+  }),
+  status: zod.enum([
+    "queued",
+    "in_production",
+    "quality_check",
+    "shipped",
+    "delivered",
+  ]),
+  statusHistory: zod.array(
+    zod.object({
+      status: zod.enum([
+        "queued",
+        "in_production",
+        "quality_check",
+        "shipped",
+        "delivered",
+      ]),
+      note: zod.string(),
+      at: zod.coerce.date(),
+    }),
+  ),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Advance the order to the next manufacturing status
+ */
+export const AdvanceOrderParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const AdvanceOrderResponse = zod.object({
+  id: zod.number(),
+  sessionId: zod.number(),
+  sessionTitle: zod.string(),
+  productName: zod.string().nullish(),
+  quote: zod.object({
+    id: zod.number(),
+    sessionId: zod.number(),
+    supplier: zod.object({
+      id: zod.number(),
+      slug: zod.string(),
+      name: zod.string(),
+      tagline: zod.string(),
+      description: zod.string(),
+      location: zod.string(),
+      country: zod.string(),
+      capabilities: zod.array(zod.string()),
+      materials: zod.array(zod.string()),
+      certifications: zod.array(zod.string()),
+      leadTimeMinDays: zod.number(),
+      leadTimeMaxDays: zod.number(),
+      pricingMultiplier: zod.number(),
+      setupFee: zod.number(),
+      rating: zod.number(),
+      capacityLevel: zod.enum(["low", "medium", "high"]),
+    }),
+    unitCost: zod.number(),
+    setupFee: zod.number(),
+    totalCost: zod.number(),
+    leadTimeDays: zod.number(),
+    processBreakdown: zod.array(
+      zod.object({
+        process: zod.string(),
+        description: zod.string(),
+        cost: zod.number(),
+      }),
+    ),
+    scoreFactors: zod.object({
+      processMatch: zod.number(),
+      materialMatch: zod.number(),
+      leadTime: zod.number(),
+      rating: zod.number(),
+      total: zod.number(),
+    }),
+    rank: zod.number(),
+    notes: zod.string(),
+    createdAt: zod.coerce.date(),
+  }),
+  supplier: zod.object({
+    id: zod.number(),
+    slug: zod.string(),
+    name: zod.string(),
+    tagline: zod.string(),
+    description: zod.string(),
+    location: zod.string(),
+    country: zod.string(),
+    capabilities: zod.array(zod.string()),
+    materials: zod.array(zod.string()),
+    certifications: zod.array(zod.string()),
+    leadTimeMinDays: zod.number(),
+    leadTimeMaxDays: zod.number(),
+    pricingMultiplier: zod.number(),
+    setupFee: zod.number(),
+    rating: zod.number(),
+    capacityLevel: zod.enum(["low", "medium", "high"]),
+  }),
+  quantity: zod.number(),
+  totalCost: zod.number(),
+  leadTimeDays: zod.number(),
+  shippingAddress: zod.object({
+    recipient: zod.string(),
+    line1: zod.string(),
+    line2: zod.string().nullish(),
+    city: zod.string(),
+    region: zod.string(),
+    postalCode: zod.string(),
+    country: zod.string(),
+  }),
+  status: zod.enum([
+    "queued",
+    "in_production",
+    "quality_check",
+    "shipped",
+    "delivered",
+  ]),
+  statusHistory: zod.array(
+    zod.object({
+      status: zod.enum([
+        "queued",
+        "in_production",
+        "quality_check",
+        "shipped",
+        "delivered",
+      ]),
+      note: zod.string(),
+      at: zod.coerce.date(),
+    }),
+  ),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});

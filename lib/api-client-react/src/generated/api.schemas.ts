@@ -143,3 +143,153 @@ export interface SessionStats {
   topCategories: CategoryCount[];
   recentSessions: DesignSessionSummary[];
 }
+
+export type SupplierCapacityLevel =
+  (typeof SupplierCapacityLevel)[keyof typeof SupplierCapacityLevel];
+
+export const SupplierCapacityLevel = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+} as const;
+
+export interface Supplier {
+  id: number;
+  slug: string;
+  name: string;
+  tagline: string;
+  description: string;
+  location: string;
+  country: string;
+  capabilities: string[];
+  materials: string[];
+  certifications: string[];
+  leadTimeMinDays: number;
+  leadTimeMaxDays: number;
+  pricingMultiplier: number;
+  setupFee: number;
+  rating: number;
+  capacityLevel: SupplierCapacityLevel;
+}
+
+export interface ProcessBreakdownItem {
+  process: string;
+  description: string;
+  cost: number;
+}
+
+export interface QuoteScoreFactors {
+  processMatch: number;
+  materialMatch: number;
+  leadTime: number;
+  rating: number;
+  total: number;
+}
+
+export interface Quote {
+  id: number;
+  sessionId: number;
+  supplier: Supplier;
+  unitCost: number;
+  setupFee: number;
+  totalCost: number;
+  leadTimeDays: number;
+  processBreakdown: ProcessBreakdownItem[];
+  scoreFactors: QuoteScoreFactors;
+  rank: number;
+  notes: string;
+  createdAt: string;
+}
+
+export interface ShippingAddress {
+  recipient: string;
+  line1: string;
+  /** @nullable */
+  line2?: string | null;
+  city: string;
+  region: string;
+  postalCode: string;
+  country: string;
+}
+
+export interface PlaceOrderInput {
+  quoteId: number;
+  /** @minimum 1 */
+  quantity: number;
+  shippingAddress: ShippingAddress;
+}
+
+export type OrderStatusEventStatus =
+  (typeof OrderStatusEventStatus)[keyof typeof OrderStatusEventStatus];
+
+export const OrderStatusEventStatus = {
+  queued: "queued",
+  in_production: "in_production",
+  quality_check: "quality_check",
+  shipped: "shipped",
+  delivered: "delivered",
+} as const;
+
+export interface OrderStatusEvent {
+  status: OrderStatusEventStatus;
+  note: string;
+  at: string;
+}
+
+export type OrderSummaryStatus =
+  (typeof OrderSummaryStatus)[keyof typeof OrderSummaryStatus];
+
+export const OrderSummaryStatus = {
+  queued: "queued",
+  in_production: "in_production",
+  quality_check: "quality_check",
+  shipped: "shipped",
+  delivered: "delivered",
+} as const;
+
+export interface OrderSummary {
+  id: number;
+  sessionId: number;
+  sessionTitle: string;
+  /** @nullable */
+  productName?: string | null;
+  supplierName: string;
+  status: OrderSummaryStatus;
+  quantity: number;
+  totalCost: number;
+  leadTimeDays: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type OrderStatus = (typeof OrderStatus)[keyof typeof OrderStatus];
+
+export const OrderStatus = {
+  queued: "queued",
+  in_production: "in_production",
+  quality_check: "quality_check",
+  shipped: "shipped",
+  delivered: "delivered",
+} as const;
+
+export interface Order {
+  id: number;
+  sessionId: number;
+  sessionTitle: string;
+  /** @nullable */
+  productName?: string | null;
+  quote: Quote;
+  supplier: Supplier;
+  quantity: number;
+  totalCost: number;
+  leadTimeDays: number;
+  shippingAddress: ShippingAddress;
+  status: OrderStatus;
+  statusHistory: OrderStatusEvent[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ListSuppliersParams = {
+  capability?: string;
+};
