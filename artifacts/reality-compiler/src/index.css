@@ -1,7 +1,11 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;500;600;700&display=swap');
+@layer theme, base, clerk, components, utilities;
 @import "tailwindcss";
+@import "@clerk/themes/shadcn.css";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
+
+.cl-formFieldInput::placeholder { color: hsl(var(--muted-foreground)); opacity: 1; }
 
 @custom-variant dark (&:is(.dark *));
 

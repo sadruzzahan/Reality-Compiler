@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7c3aed"/>
+      <stop offset="1" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+  <path d="M32 4 L56 18 L56 46 L32 60 L8 46 L8 18 Z" fill="url(#g)"/>
+  <path d="M32 14 L46 22 L46 38 L32 46 L18 38 L18 22 Z" fill="#0a0a0a" opacity="0.85"/>
+  <text x="32" y="36" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="14" fill="#ffffff">RC</text>
+</svg>

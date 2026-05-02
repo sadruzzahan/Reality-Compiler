@@ -377,6 +377,7 @@ export const PlaceOrderBody = zod.object({
     postalCode: zod.string(),
     country: zod.string(),
   }),
+  marketplaceListingId: zod.number().nullish(),
 });
 
 /**
@@ -595,4 +596,144 @@ export const AdvanceOrderResponse = zod.object({
   ),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Get current authenticated user profile
+ */
+export const GetMeResponse = zod.object({
+  userId: zod.string(),
+  handle: zod.string(),
+  email: zod.string().nullish(),
+  firstName: zod.string().nullish(),
+  lastName: zod.string().nullish(),
+  imageUrl: zod.string().nullish(),
+});
+
+/**
+ * @summary List published marketplace designs
+ */
+export const ListMarketplaceListingsQueryParams = zod.object({
+  category: zod.coerce.string().optional(),
+  sort: zod.enum(["popular", "price-asc", "price-desc", "newest"]).optional(),
+});
+
+export const ListMarketplaceListingsResponseItem = zod.object({
+  id: zod.number(),
+  sessionId: zod.number(),
+  userId: zod.string(),
+  creatorHandle: zod.string(),
+  title: zod.string(),
+  category: zod.string(),
+  description: zod.string(),
+  listingPrice: zod.number(),
+  thumbnailUrl: zod.string().nullish(),
+  primaryMaterial: zod.string().nullish(),
+  productName: zod.string().nullish(),
+  orderCount: zod.number(),
+  createdAt: zod.coerce.date(),
+});
+export const ListMarketplaceListingsResponse = zod.array(
+  ListMarketplaceListingsResponseItem,
+);
+
+/**
+ * @summary Publish a session as a marketplace listing
+ */
+export const PublishListingBody = zod.object({
+  sessionId: zod.number(),
+  title: zod.string(),
+  category: zod.string(),
+  description: zod.string(),
+  listingPrice: zod.number(),
+});
+
+/**
+ * @summary Get a marketplace listing detail with embedded design output
+ */
+export const GetMarketplaceListingParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetMarketplaceListingResponse = zod.object({
+  id: zod.number(),
+  sessionId: zod.number(),
+  userId: zod.string(),
+  creatorHandle: zod.string(),
+  title: zod.string(),
+  category: zod.string(),
+  description: zod.string(),
+  listingPrice: zod.number(),
+  orderCount: zod.number(),
+  designOutput: zod.object({
+    id: zod.number(),
+    sessionId: zod.number(),
+    productName: zod.string(),
+    category: zod.string(),
+    summary: zod.string(),
+    primaryMaterial: zod.string(),
+    materials: zod.array(zod.string()),
+    dimensions: zod.string(),
+    weightGrams: zod.number().nullish(),
+    processes: zod.array(zod.string()),
+    bom: zod.array(
+      zod.object({
+        component: zod.string(),
+        material: zod.string(),
+        quantity: zod.number(),
+        unit: zod.string(),
+        unitCost: zod.number(),
+        totalCost: zod.number(),
+      }),
+    ),
+    costEstimate: zod.object({
+      low: zod.number(),
+      high: zod.number(),
+      currency: zod.string(),
+      leadTimeDays: zod.number(),
+    }),
+    imageUrl: zod.string().nullish(),
+    manufacturingNotes: zod.string(),
+    createdAt: zod.coerce.date(),
+  }),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Unpublish a marketplace listing
+ */
+export const UnpublishListingParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary Get a designer profile (listings + total orders)
+ */
+export const GetDesignerProfileParams = zod.object({
+  userId: zod.coerce.string(),
+});
+
+export const GetDesignerProfileResponse = zod.object({
+  userId: zod.string(),
+  handle: zod.string(),
+  listings: zod.array(
+    zod.object({
+      id: zod.number(),
+      sessionId: zod.number(),
+      userId: zod.string(),
+      creatorHandle: zod.string(),
+      title: zod.string(),
+      category: zod.string(),
+      description: zod.string(),
+      listingPrice: zod.number(),
+      thumbnailUrl: zod.string().nullish(),
+      primaryMaterial: zod.string().nullish(),
+      productName: zod.string().nullish(),
+      orderCount: zod.number(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  totalListings: zod.number(),
+  totalOrders: zod.number(),
 });

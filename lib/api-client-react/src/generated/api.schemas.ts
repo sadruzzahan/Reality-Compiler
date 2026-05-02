@@ -217,6 +217,71 @@ export interface PlaceOrderInput {
   /** @minimum 1 */
   quantity: number;
   shippingAddress: ShippingAddress;
+  /** @nullable */
+  marketplaceListingId?: number | null;
+}
+
+export interface Me {
+  userId: string;
+  handle: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  firstName?: string | null;
+  /** @nullable */
+  lastName?: string | null;
+  /** @nullable */
+  imageUrl?: string | null;
+}
+
+export interface PublishListingInput {
+  sessionId: number;
+  title: string;
+  category: string;
+  description: string;
+  listingPrice: number;
+}
+
+export interface MarketplaceListingSummary {
+  id: number;
+  sessionId: number;
+  userId: string;
+  creatorHandle: string;
+  title: string;
+  category: string;
+  description: string;
+  listingPrice: number;
+  /** @nullable */
+  thumbnailUrl?: string | null;
+  /** @nullable */
+  primaryMaterial?: string | null;
+  /** @nullable */
+  productName?: string | null;
+  orderCount: number;
+  createdAt: string;
+}
+
+export interface MarketplaceListingDetail {
+  id: number;
+  sessionId: number;
+  userId: string;
+  creatorHandle: string;
+  title: string;
+  category: string;
+  description: string;
+  listingPrice: number;
+  orderCount: number;
+  designOutput: DesignOutput;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DesignerProfile {
+  userId: string;
+  handle: string;
+  listings: MarketplaceListingSummary[];
+  totalListings: number;
+  totalOrders: number;
 }
 
 export type OrderStatusEventStatus =
@@ -293,3 +358,18 @@ export interface Order {
 export type ListSuppliersParams = {
   capability?: string;
 };
+
+export type ListMarketplaceListingsParams = {
+  category?: string;
+  sort?: ListMarketplaceListingsSort;
+};
+
+export type ListMarketplaceListingsSort =
+  (typeof ListMarketplaceListingsSort)[keyof typeof ListMarketplaceListingsSort];
+
+export const ListMarketplaceListingsSort = {
+  popular: "popular",
+  "price-asc": "price-asc",
+  "price-desc": "price-desc",
+  newest: "newest",
+} as const;

@@ -96,6 +96,8 @@ export type OrderStatusEvent = {
 
 export const ordersTable = pgTable("orders", {
   id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().default("system-seed"),
+  marketplaceListingId: integer("marketplace_listing_id"),
   quoteId: integer("quote_id")
     .notNull()
     .references(() => quotesTable.id, { onDelete: "restrict" }),

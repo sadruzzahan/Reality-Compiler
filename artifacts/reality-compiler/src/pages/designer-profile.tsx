@@ -1,0 +1,141 @@
+import { Link, useParams } from "wouter";
+import { User, Package, TrendingUp, Store } from "lucide-react";
+import { useGetDesignerProfile } from "@workspace/api-client-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+
+export default function DesignerProfile() {
+  const params = useParams();
+  const userId = params.userId!;
+  const { data, isLoading } = useGetDesignerProfile(userId);
+
+  if (isLoading) {
+    return (
+      <div className="container max-w-6xl mx-auto px-6 py-12">
+        <Skeleton className="h-40 mb-6" />
+        <Skeleton className="h-96" />
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="container max-w-6xl mx-auto px-6 py-12">
+        <p className="text-muted-foreground">Designer not found.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 overflow-auto bg-muted/10">
+      <div className="container max-w-6xl mx-auto px-6 py-12">
+        <Card className="mb-8 border-border/60">
+          <CardContent className="pt-8 pb-6">
+            <div className="flex flex-col md:flex-row md:items-center gap-6">
+              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                <User className="w-10 h-10 text-primary" />
+              </div>
+              <div className="flex-1">
+                <h1 className="text-3xl font-bold font-sans">
+                  @{data.handle}
+                </h1>
+                <p className="text-muted-foreground mt-1 font-mono text-sm">
+                  Designer · Reality Compiler studio
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-4 text-center">
+                <div>
+                  <div className="text-2xl font-bold font-mono">
+                    {data.totalListings}
+                  </div>
+                  <div className="text-xs text-muted-foreground font-mono uppercase tracking-wider">
+                    Designs
+                  </div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold font-mono text-emerald-400">
+                    {data.totalOrders}
+                  </div>
+                  <div className="text-xs text-muted-foreground font-mono uppercase tracking-wider">
+                    Orders
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="flex items-center gap-2 mb-4">
+          <Store className="w-4 h-4 text-primary" />
+          <h2 className="font-mono text-sm uppercase tracking-widest">
+            Published designs
+          </h2>
+        </div>
+
+        {data.listings.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center text-muted-foreground">
+              No published designs yet.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {data.listings.map((l) => (
+              <Link key={l.id} href={`/marketplace/${l.id}`}>
+                <Card
+                  className="h-full hover-elevate cursor-pointer"
+                  data-testid={`card-designer-listing-${l.id}`}
+                >
+                  <div className="aspect-square bg-gradient-to-br from-primary/10 to-accent/10 rounded-t-xl flex items-center justify-center">
+                    {l.thumbnailUrl ? (
+                      <img
+                        src={l.thumbnailUrl}
+                        alt={l.title}
+                        className="w-full h-full object-cover rounded-t-xl"
+                      />
+                    ) : (
+                      <Package className="w-14 h-14 text-primary/40" />
+                    )}
+                  </div>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <CardTitle className="text-base font-sans line-clamp-1">
+                        {l.title}
+                      </CardTitle>
+                      <Badge variant="outline" className="font-mono text-xs shrink-0">
+                        {l.category}
+                      </Badge>
+                    </div>
+                    <CardDescription className="line-clamp-2 text-xs">
+                      {l.description}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex items-center justify-between">
+                    {l.orderCount > 0 ? (
+                      <span className="text-xs text-emerald-400 flex items-center gap-1 font-mono">
+                        <TrendingUp className="w-3 h-3" />
+                        {l.orderCount}
+                      </span>
+                    ) : (
+                      <span />
+                    )}
+                    <span className="font-mono font-bold">
+                      ${l.listingPrice.toLocaleString()}
+                    </span>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

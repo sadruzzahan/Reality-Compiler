@@ -12,4 +12,6 @@ export interface PlaceOrderInput {
   /** @minimum 1 */
   quantity: number;
   shippingAddress: ShippingAddress;
+  /** @nullable */
+  marketplaceListingId?: number | null;
 }

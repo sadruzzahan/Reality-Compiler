@@ -13,6 +13,25 @@ import {
 import { GenerateQuotesParams, ListQuotesParams } from "@workspace/api-zod";
 import { rankSuppliers } from "../lib/routing";
 import { serializeSupplier } from "./suppliers";
+import { requireAuth } from "../middlewares/auth";
+
+async function userMayAccessSession(
+  sessionId: number,
+  userId: string,
+): Promise<boolean> {
+  const [s] = await db
+    .select({ userId: designSessionsTable.userId })
+    .from(designSessionsTable)
+    .where(eq(designSessionsTable.id, sessionId));
+  if (!s) return false;
+  if (s.userId === userId) return true;
+  const { marketplaceListingsTable } = await import("@workspace/db");
+  const [listing] = await db
+    .select({ id: marketplaceListingsTable.id })
+    .from(marketplaceListingsTable)
+    .where(eq(marketplaceListingsTable.sessionId, sessionId));
+  return Boolean(listing);
+}
 
 const router: IRouter = Router();
 
@@ -45,20 +64,28 @@ async function loadQuotesForSession(sessionId: number): Promise<QuoteWithSupplie
   return rows.map((r) => ({ ...r.quote, supplier: r.supplier }));
 }
 
-router.get("/sessions/:id/quotes", async (req, res): Promise<void> => {
+router.get("/sessions/:id/quotes", requireAuth, async (req, res): Promise<void> => {
   const params = ListQuotesParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
+    return;
+  }
+  if (!(await userMayAccessSession(params.data.id, req.userId!))) {
+    res.status(404).json({ error: "Session not found" });
     return;
   }
   const quotes = await loadQuotesForSession(params.data.id);
   res.json(quotes.map(serializeQuote));
 });
 
-router.post("/sessions/:id/quotes", async (req, res): Promise<void> => {
+router.post("/sessions/:id/quotes", requireAuth, async (req, res): Promise<void> => {
   const params = GenerateQuotesParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
+    return;
+  }
+  if (!(await userMayAccessSession(params.data.id, req.userId!))) {
+    res.status(404).json({ error: "Session not found" });
     return;
   }
 

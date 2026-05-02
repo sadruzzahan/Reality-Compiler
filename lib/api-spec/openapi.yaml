@@ -22,6 +22,10 @@ tags:
     description: Manufacturing quotes for design sessions
   - name: orders
     description: Manufacturing orders
+  - name: marketplace
+    description: Design IP marketplace listings and designer profiles
+  - name: me
+    description: Current authenticated user
 paths:
   /healthz:
     get:
@@ -361,6 +365,162 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /me:
+    get:
+      operationId: getMe
+      tags: [me]
+      summary: Get current authenticated user profile
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /marketplace/listings:
+    get:
+      operationId: listMarketplaceListings
+      tags: [marketplace]
+      summary: List published marketplace designs
+      parameters:
+        - in: query
+          name: category
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: sort
+          required: false
+          schema:
+            type: string
+            enum: [popular, price-asc, price-desc, newest]
+      responses:
+        "200":
+          description: Listings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MarketplaceListingSummary"
+    post:
+      operationId: publishListing
+      tags: [marketplace]
+      summary: Publish a session as a marketplace listing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublishListingInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceListingDetail"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not session owner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /marketplace/listings/{id}:
+    get:
+      operationId: getMarketplaceListing
+      tags: [marketplace]
+      summary: Get a marketplace listing detail with embedded design output
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Listing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceListingDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: unpublishListing
+      tags: [marketplace]
+      summary: Unpublish a marketplace listing
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not owner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /marketplace/profile/{userId}:
+    get:
+      operationId: getDesignerProfile
+      tags: [marketplace]
+      summary: Get a designer profile (listings + total orders)
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DesignerProfile"
         "404":
           description: Not found
           content:
@@ -821,10 +981,158 @@ components:
           minimum: 1
         shippingAddress:
           $ref: "#/components/schemas/ShippingAddress"
+        marketplaceListingId:
+          type: ["integer", "null"]
       required:
         - quoteId
         - quantity
         - shippingAddress
+
+    Me:
+      type: object
+      properties:
+        userId:
+          type: string
+        handle:
+          type: string
+        email:
+          type: ["string", "null"]
+        firstName:
+          type: ["string", "null"]
+        lastName:
+          type: ["string", "null"]
+        imageUrl:
+          type: ["string", "null"]
+      required:
+        - userId
+        - handle
+
+    PublishListingInput:
+      type: object
+      properties:
+        sessionId:
+          type: integer
+        title:
+          type: string
+        category:
+          type: string
+        description:
+          type: string
+        listingPrice:
+          type: number
+      required:
+        - sessionId
+        - title
+        - category
+        - description
+        - listingPrice
+
+    MarketplaceListingSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+        userId:
+          type: string
+        creatorHandle:
+          type: string
+        title:
+          type: string
+        category:
+          type: string
+        description:
+          type: string
+        listingPrice:
+          type: number
+        thumbnailUrl:
+          type: ["string", "null"]
+        primaryMaterial:
+          type: ["string", "null"]
+        productName:
+          type: ["string", "null"]
+        orderCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - sessionId
+        - userId
+        - creatorHandle
+        - title
+        - category
+        - description
+        - listingPrice
+        - orderCount
+        - createdAt
+
+    MarketplaceListingDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+        userId:
+          type: string
+        creatorHandle:
+          type: string
+        title:
+          type: string
+        category:
+          type: string
+        description:
+          type: string
+        listingPrice:
+          type: number
+        orderCount:
+          type: integer
+        designOutput:
+          $ref: "#/components/schemas/DesignOutput"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - sessionId
+        - userId
+        - creatorHandle
+        - title
+        - category
+        - description
+        - listingPrice
+        - orderCount
+        - designOutput
+        - createdAt
+        - updatedAt
+
+    DesignerProfile:
+      type: object
+      properties:
+        userId:
+          type: string
+        handle:
+          type: string
+        listings:
+          type: array
+          items:
+            $ref: "#/components/schemas/MarketplaceListingSummary"
+        totalListings:
+          type: integer
+        totalOrders:
+          type: integer
+      required:
+        - userId
+        - handle
+        - listings
+        - totalListings
+        - totalOrders
 
     OrderStatusEvent:
       type: object

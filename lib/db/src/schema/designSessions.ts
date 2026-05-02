@@ -10,6 +10,7 @@ import {
 
 export const designSessionsTable = pgTable("design_sessions", {
   id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().default("system-seed"),
   title: text("title").notNull(),
   status: text("status").notNull().default("generating"),
   createdAt: timestamp("created_at", { withTimezone: true })

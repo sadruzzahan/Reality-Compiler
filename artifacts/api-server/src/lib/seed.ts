@@ -1,5 +1,11 @@
-import { db, designSessionsTable, designMessagesTable, designOutputsTable } from "@workspace/db";
-import { sql } from "drizzle-orm";
+import {
+  db,
+  designSessionsTable,
+  designMessagesTable,
+  designOutputsTable,
+  marketplaceListingsTable,
+} from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
 import { logger } from "./logger";
 
 export async function seedIfEmpty(): Promise<void> {
@@ -90,7 +96,7 @@ export async function seedIfEmpty(): Promise<void> {
     for (const seed of seeds) {
       const [session] = await db
         .insert(designSessionsTable)
-        .values({ title: seed.title, status: "ready" })
+        .values({ userId: "system-seed", title: seed.title, status: "ready" })
         .returning();
 
       await db.insert(designMessagesTable).values([
@@ -122,5 +128,63 @@ export async function seedIfEmpty(): Promise<void> {
     logger.info({ count: seeds.length }, "Seeded design sessions");
   } catch (err) {
     logger.error({ err }, "Failed to seed");
+  }
+}
+
+export async function seedMarketplaceIfEmpty(): Promise<void> {
+  try {
+    const [{ c }] = await db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(marketplaceListingsTable);
+    if (c > 0) return;
+
+    const seedSessions = await db
+      .select()
+      .from(designSessionsTable)
+      .where(eq(designSessionsTable.userId, "system-seed"));
+
+    const listingDefaults: Record<
+      string,
+      { title: string; category: string; description: string; price: number }
+    > = {
+      "Drift Pour-Over Brewer": {
+        title: "Drift Pour-Over Brewer",
+        category: "Consumer",
+        description:
+          "A pocket-sized single-cup pour-over coffee brewer that folds flat for travel. Stainless petals snap into a cone over any standard mug, with a silicone collar for a stable rim grip.",
+        price: 24,
+      },
+      "Axis Modular Lamp": {
+        title: "Axis Modular Lamp",
+        category: "Consumer",
+        description:
+          "A desk lamp built from magnetic aluminum segments that snap together at any angle. Reconfigure the arm geometry without tools; USB-C powered with a tactile dimmer wheel.",
+        price: 129,
+      },
+    };
+
+    for (const session of seedSessions) {
+      const [output] = await db
+        .select()
+        .from(designOutputsTable)
+        .where(eq(designOutputsTable.sessionId, session.id))
+        .limit(1);
+      if (!output) continue;
+      const meta = listingDefaults[output.productName];
+      if (!meta) continue;
+      await db.insert(marketplaceListingsTable).values({
+        sessionId: session.id,
+        userId: "system-seed",
+        creatorHandle: "studio",
+        title: meta.title,
+        category: meta.category,
+        description: meta.description,
+        listingPrice: String(meta.price),
+        status: "active",
+      });
+    }
+    logger.info("Seeded marketplace listings");
+  } catch (err) {
+    logger.error({ err }, "Failed to seed marketplace");
   }
 }

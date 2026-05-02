@@ -19,7 +19,13 @@ Full-stack monorepo. Users describe a physical product in plain English; AI gene
 - `DATABASE_URL` (and PG*) — managed Postgres
 - `AI_INTEGRATIONS_OPENAI_BASE_URL`, `AI_INTEGRATIONS_OPENAI_API_KEY` — Replit AI Integrations
 
-## Downstream tasks
+## Auth (Clerk)
 
-- Task #2: Supplier network / sourcing
-- Task #3: Marketplace + auth
+Clerk Auth (Replit-managed) wraps the React app. Sign-in/sign-up at `/sign-in/*?` and `/sign-up/*?` use the `shadcn` theme. The Express API mounts `clerkMiddleware()` and a `requireAuth` middleware reads `getAuth(req).sessionClaims.userId || userId` and writes `req.userId`. Sessions and orders are scoped by `userId`. Public routes: `/`, `/marketplace`, `/marketplace/:id`, `/designers/:userId`, `/suppliers`, `/about`, `/sign-in`, `/sign-up`, `GET /api/sessions/stats`, marketplace routes. Protected: `/sessions*`, `/orders*`, `/api/sessions*`, `/api/orders*`, `/api/me`.
+
+## Marketplace
+
+- Tables: `marketplace_listings (id, sessionId UNIQUE, userId, creatorHandle, title, category, description, listingPrice, status)`. Orders gain optional `marketplaceListingId`.
+- Routes: `GET /api/marketplace/listings?sort=`, `POST /api/marketplace/listings` (publish, upserts by sessionId), `GET /api/marketplace/listings/{id}`, `DELETE /api/marketplace/listings/{id}`, `GET /api/marketplace/profile/{userId}`.
+- Seed publishes any `system-seed` user sessions on startup so the marketplace is never empty for guests.
+- Frontend pages: `marketplace.tsx`, `marketplace-detail.tsx` (with order dialog), `designer-profile.tsx`. Publish action via `components/publish-dialog.tsx` on session-workspace.

@@ -25,6 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import { QuotesPanel } from "@/components/quotes-panel";
+import { PublishDialog } from "@/components/publish-dialog";
 
 export default function SessionWorkspace() {
   const { id } = useParams();
@@ -124,6 +125,14 @@ export default function SessionWorkspace() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {session?.status === "ready" && output && (
+            <PublishDialog
+              sessionId={sessionId}
+              defaultTitle={output.productName}
+              defaultCategory={output.category}
+              defaultDescription={output.summary}
+            />
+          )}
           {session?.status === "ready" && (
             <Button variant="outline" size="sm" className="font-mono text-xs" onClick={() => refetch()}>
               Refresh

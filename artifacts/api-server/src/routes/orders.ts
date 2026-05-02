@@ -7,6 +7,7 @@ import {
   suppliersTable,
   designSessionsTable,
   designOutputsTable,
+  marketplaceListingsTable,
   type Order,
   type Quote,
   type Supplier,
@@ -19,6 +20,7 @@ import {
   PlaceOrderBody,
 } from "@workspace/api-zod";
 import { serializeSupplier } from "./suppliers";
+import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
@@ -109,7 +111,7 @@ async function serializeOrder(order: OrderRow) {
   };
 }
 
-router.get("/orders", async (_req, res): Promise<void> => {
+router.get("/orders", requireAuth, async (req, res): Promise<void> => {
   const rows = await db
     .select({
       order: ordersTable,
@@ -122,6 +124,7 @@ router.get("/orders", async (_req, res): Promise<void> => {
       designSessionsTable,
       eq(designSessionsTable.id, ordersTable.sessionId),
     )
+    .where(eq(ordersTable.userId, req.userId!))
     .orderBy(desc(ordersTable.createdAt));
 
   const summaries = await Promise.all(
@@ -150,7 +153,7 @@ router.get("/orders", async (_req, res): Promise<void> => {
   res.json(summaries);
 });
 
-router.post("/orders", async (req, res): Promise<void> => {
+router.post("/orders", requireAuth, async (req, res): Promise<void> => {
   const body = PlaceOrderBody.safeParse(req.body);
   if (!body.success) {
     res.status(400).json({ error: body.error.message });
@@ -158,11 +161,38 @@ router.post("/orders", async (req, res): Promise<void> => {
   }
 
   const [row] = await db
-    .select({ quote: quotesTable, supplier: suppliersTable })
+    .select({
+      quote: quotesTable,
+      supplier: suppliersTable,
+      session: designSessionsTable,
+    })
     .from(quotesTable)
     .innerJoin(suppliersTable, eq(suppliersTable.id, quotesTable.supplierId))
+    .innerJoin(
+      designSessionsTable,
+      eq(designSessionsTable.id, quotesTable.sessionId),
+    )
     .where(eq(quotesTable.id, body.data.quoteId));
   if (!row) {
+    res.status(404).json({ error: "Quote not found" });
+    return;
+  }
+
+  // Authorize: the requester must either own the underlying session, or be
+  // ordering against a published marketplace listing for this session.
+  let authorized = row.session.userId === req.userId;
+  if (!authorized && body.data.marketplaceListingId != null) {
+    const [listing] = await db
+      .select()
+      .from(marketplaceListingsTable)
+      .where(eq(marketplaceListingsTable.id, body.data.marketplaceListingId));
+    authorized = Boolean(
+      listing &&
+        listing.sessionId === row.quote.sessionId &&
+        listing.status === "published",
+    );
+  }
+  if (!authorized) {
     res.status(404).json({ error: "Quote not found" });
     return;
   }
@@ -181,6 +211,8 @@ router.post("/orders", async (req, res): Promise<void> => {
   const [created] = await db
     .insert(ordersTable)
     .values({
+      userId: req.userId!,
+      marketplaceListingId: body.data.marketplaceListingId ?? null,
       quoteId: row.quote.id,
       sessionId: row.quote.sessionId,
       supplierId: row.supplier.id,
@@ -201,28 +233,28 @@ router.post("/orders", async (req, res): Promise<void> => {
   res.status(201).json(await serializeOrder(full));
 });
 
-router.get("/orders/:id", async (req, res): Promise<void> => {
+router.get("/orders/:id", requireAuth, async (req, res): Promise<void> => {
   const params = GetOrderParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;
   }
   const order = await loadOrder(params.data.id);
-  if (!order) {
+  if (!order || order.userId !== req.userId) {
     res.status(404).json({ error: "Order not found" });
     return;
   }
   res.json(await serializeOrder(order));
 });
 
-router.post("/orders/:id/advance", async (req, res): Promise<void> => {
+router.post("/orders/:id/advance", requireAuth, async (req, res): Promise<void> => {
   const params = AdvanceOrderParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;
   }
   const order = await loadOrder(params.data.id);
-  if (!order) {
+  if (!order || order.userId !== req.userId) {
     res.status(404).json({ error: "Order not found" });
     return;
   }

@@ -1,10 +1,11 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, and } from "drizzle-orm";
 import {
   db,
   designSessionsTable,
   designMessagesTable,
   designOutputsTable,
+  marketplaceListingsTable,
 } from "@workspace/db";
 import {
   CreateSessionBody,
@@ -18,8 +19,26 @@ import {
   generateDesignSpec,
   generateConceptImageDataUrl,
 } from "../lib/designPipeline";
+import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
+
+async function userCanReadSession(
+  sessionId: number,
+  userId: string,
+): Promise<boolean> {
+  const [s] = await db
+    .select({ userId: designSessionsTable.userId })
+    .from(designSessionsTable)
+    .where(eq(designSessionsTable.id, sessionId));
+  if (!s) return false;
+  if (s.userId === userId) return true;
+  const [listing] = await db
+    .select({ id: marketplaceListingsTable.id })
+    .from(marketplaceListingsTable)
+    .where(eq(marketplaceListingsTable.sessionId, sessionId));
+  return Boolean(listing);
+}
 
 type Status = "generating" | "ready" | "error";
 
@@ -90,7 +109,7 @@ async function buildSessionResponse(sessionId: number) {
   };
 }
 
-async function buildSummaries() {
+async function buildSummaries(userId?: string) {
   const rows = await db
     .select({
       id: designSessionsTable.id,
@@ -100,6 +119,7 @@ async function buildSummaries() {
       updatedAt: designSessionsTable.updatedAt,
     })
     .from(designSessionsTable)
+    .where(userId ? eq(designSessionsTable.userId, userId) : sql`true`)
     .orderBy(desc(designSessionsTable.updatedAt));
 
   const summaries = await Promise.all(
@@ -179,8 +199,8 @@ async function runPipeline(sessionId: number) {
   }
 }
 
-router.get("/sessions", async (_req, res): Promise<void> => {
-  const summaries = await buildSummaries();
+router.get("/sessions", requireAuth, async (req, res): Promise<void> => {
+  const summaries = await buildSummaries(req.userId);
   res.json(summaries);
 });
 
@@ -228,7 +248,7 @@ router.get("/sessions/stats", async (_req, res): Promise<void> => {
   });
 });
 
-router.post("/sessions", async (req, res): Promise<void> => {
+router.post("/sessions", requireAuth, async (req, res): Promise<void> => {
   const parsed = CreateSessionBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -244,6 +264,7 @@ router.post("/sessions", async (req, res): Promise<void> => {
   const [session] = await db
     .insert(designSessionsTable)
     .values({
+      userId: req.userId!,
       title: prompt.slice(0, 60),
       status: "generating",
     })
@@ -265,10 +286,14 @@ router.post("/sessions", async (req, res): Promise<void> => {
   res.status(result?.status === "error" ? 502 : 201).json(result);
 });
 
-router.get("/sessions/:id", async (req, res): Promise<void> => {
+router.get("/sessions/:id", requireAuth, async (req, res): Promise<void> => {
   const params = GetSessionParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
+    return;
+  }
+  if (!(await userCanReadSession(params.data.id, req.userId!))) {
+    res.status(404).json({ error: "Session not found" });
     return;
   }
   const result = await buildSessionResponse(params.data.id);
@@ -279,7 +304,7 @@ router.get("/sessions/:id", async (req, res): Promise<void> => {
   res.json(result);
 });
 
-router.delete("/sessions/:id", async (req, res): Promise<void> => {
+router.delete("/sessions/:id", requireAuth, async (req, res): Promise<void> => {
   const params = DeleteSessionParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -287,25 +312,38 @@ router.delete("/sessions/:id", async (req, res): Promise<void> => {
   }
   await db
     .delete(designSessionsTable)
-    .where(eq(designSessionsTable.id, params.data.id));
+    .where(
+      and(
+        eq(designSessionsTable.id, params.data.id),
+        eq(designSessionsTable.userId, req.userId!),
+      ),
+    );
   res.sendStatus(204);
 });
 
-router.get("/sessions/:id/messages", async (req, res): Promise<void> => {
-  const params = ListMessagesParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const messages = await db
-    .select()
-    .from(designMessagesTable)
-    .where(eq(designMessagesTable.sessionId, params.data.id))
-    .orderBy(designMessagesTable.createdAt);
-  res.json(messages.map(serializeMessage));
-});
+router.get(
+  "/sessions/:id/messages",
+  requireAuth,
+  async (req, res): Promise<void> => {
+    const params = ListMessagesParams.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ error: params.error.message });
+      return;
+    }
+    if (!(await userCanReadSession(params.data.id, req.userId!))) {
+      res.status(404).json({ error: "Session not found" });
+      return;
+    }
+    const messages = await db
+      .select()
+      .from(designMessagesTable)
+      .where(eq(designMessagesTable.sessionId, params.data.id))
+      .orderBy(designMessagesTable.createdAt);
+    res.json(messages.map(serializeMessage));
+  },
+);
 
-router.post("/sessions/:id/messages", async (req, res): Promise<void> => {
+router.post("/sessions/:id/messages", requireAuth, async (req, res): Promise<void> => {
   const params = SendMessageParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -329,6 +367,10 @@ router.post("/sessions/:id/messages", async (req, res): Promise<void> => {
     .where(eq(designSessionsTable.id, params.data.id));
   if (!session) {
     res.status(404).json({ error: "Session not found" });
+    return;
+  }
+  if (session.userId !== req.userId) {
+    res.status(403).json({ error: "Not session owner" });
     return;
   }
 
