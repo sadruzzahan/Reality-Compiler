@@ -65,6 +65,8 @@ async function loadOrder(id: number): Promise<OrderRow | null> {
 }
 
 async function getSessionTitleAndProduct(sessionId: number) {
+  // Include soft-deleted sessions so existing orders can still render their
+  // historical title even after the underlying session was removed.
   const [session] = await db
     .select({ title: designSessionsTable.title })
     .from(designSessionsTable)
@@ -219,6 +221,9 @@ router.get(
       typeof marketplaceListingsTable.$inferSelect
     >();
     if (listingIds.length > 0) {
+      // Intentionally include soft-deleted listings so designers still see
+      // the title/etc. for orders placed before unpublish; we surface the
+      // tombstone via `listingDeleted` below.
       const listings = await db
         .select()
         .from(marketplaceListingsTable)
@@ -273,7 +278,8 @@ router.get(
           ? listingById.get(r.order.marketplaceListingId) ?? null
           : null;
       const listingDeleted =
-        r.order.marketplaceListingId != null && listing == null;
+        r.order.marketplaceListingId != null &&
+        (listing == null || listing.deletedAt != null);
       return {
         id: r.order.id,
         sessionId: r.order.sessionId,
@@ -316,7 +322,12 @@ router.post(
         designSessionsTable,
         eq(designSessionsTable.id, quotesTable.sessionId),
       )
-      .where(eq(quotesTable.id, body.quoteId));
+      .where(
+        and(
+          eq(quotesTable.id, body.quoteId),
+          isNull(designSessionsTable.deletedAt),
+        ),
+      );
     if (!row) throw notFound("Quote");
 
     let listing: typeof marketplaceListingsTable.$inferSelect | null = null;
