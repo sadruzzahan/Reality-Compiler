@@ -1,7 +1,7 @@
 import express, { type Express } from "express";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
-import { clerkMiddleware } from "@clerk/express";
+import { clerkMiddleware, getAuth } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import {
   CLERK_PROXY_PATH,
@@ -13,7 +13,9 @@ import { corsMiddleware } from "./middlewares/cors";
 import { errorHandler, notFoundHandler } from "./middlewares/errorHandler";
 import { globalLimiter } from "./middlewares/rateLimits";
 import router from "./routes";
+import metricsRouter from "./routes/metrics";
 import { logger } from "./lib/logger";
+import { metricsMiddleware } from "./lib/metrics";
 
 const app: Express = express();
 
@@ -29,6 +31,30 @@ app.use(
   pinoHttp({
     logger,
     genReqId: (req) => (req as { id?: string }).id ?? "unknown",
+    // One structured line per request: method, path, status, duration,
+    // userId, requestId. Severity follows status class so error budgets and
+    // alerts can key off log level alone.
+    customLogLevel: (_req, res, err) => {
+      if (err || res.statusCode >= 500) return "error";
+      if (res.statusCode >= 400) return "warn";
+      return "info";
+    },
+    customProps: (req) => {
+      // getAuth() is safe to call even when clerk hasn't authenticated the
+      // request — it returns an object with userId === null. customProps runs
+      // when the response log is emitted, so clerkMiddleware has already run.
+      let userId: string | null = null;
+      try {
+        userId = getAuth(req as never)?.userId ?? null;
+      } catch {
+        userId = null;
+      }
+      return { userId };
+    },
+    customSuccessMessage: (req, res, time) =>
+      `${req.method} ${req.url?.split("?")[0]} ${res.statusCode} ${time}ms`,
+    customErrorMessage: (req, res, _err) =>
+      `${req.method} ${req.url?.split("?")[0]} ${res.statusCode}`,
     serializers: {
       req(req) {
         return {
@@ -45,6 +71,16 @@ app.use(
     },
   }),
 );
+
+// Record Prometheus metrics for every request (cheap; cardinality is bounded
+// to mounted route patterns). Mount before rate limiter so metric scrapers
+// don't burn the global budget.
+app.use(metricsMiddleware);
+
+// Prometheus scrape endpoint — gated by METRICS_TOKEN env var. Disabled when
+// the env var is unset (returns 404). Mounted before rate limiter and CORS so
+// it stays scrapeable from internal monitoring without burning the budget.
+app.use("/metrics", metricsRouter);
 
 // Clerk Frontend API proxy MUST stay before body parsing — it streams the raw
 // request body upstream and would break if we consumed it first.

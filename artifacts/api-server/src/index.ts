@@ -1,3 +1,5 @@
+// Load Sentry FIRST so any errors during app bootstrap are captured.
+import "./instrument";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { seedIfEmpty, seedMarketplaceIfEmpty } from "./lib/seed";

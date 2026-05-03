@@ -15,13 +15,18 @@ import {
 } from "@clerk/react";
 import { shadcn } from "@clerk/themes";
 import {
+  QueryCache,
   QueryClient,
   QueryClientProvider,
+  MutationCache,
   useQueryClient,
 } from "@tanstack/react-query";
+import { ApiError } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useDocumentHead } from "@/hooks/use-document-head";
+import { SentryErrorBoundary, captureException } from "@/lib/sentry";
+import { ErrorFallback } from "@/components/error-fallback";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import Sessions from "@/pages/sessions";
@@ -46,7 +51,25 @@ import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
 import { CookieBanner } from "@/components/cookie-banner";
 
-const queryClient = new QueryClient();
+// Forward unhandled query/mutation errors to Sentry. Skip 4xx ApiErrors
+// (validation, not-found, unauthorized) — those are user-facing, not crashes,
+// and would drown the signal in noise.
+function reportQueryError(err: unknown): void {
+  if (err instanceof ApiError) {
+    const status = (err as ApiError).status;
+    if (status >= 400 && status < 500) return;
+  }
+  captureException(err);
+}
+
+const queryClient = new QueryClient({
+  queryCache: new QueryCache({
+    onError: reportQueryError,
+  }),
+  mutationCache: new MutationCache({
+    onError: reportQueryError,
+  }),
+});
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -404,9 +427,19 @@ function ClerkProviderWithRoutes() {
 
 function App() {
   return (
-    <WouterRouter base={basePath}>
-      <ClerkProviderWithRoutes />
-    </WouterRouter>
+    <SentryErrorBoundary
+      fallback={({ error, resetError, eventId }) => (
+        <ErrorFallback
+          error={error}
+          resetError={resetError}
+          eventId={eventId ?? undefined}
+        />
+      )}
+    >
+      <WouterRouter base={basePath}>
+        <ClerkProviderWithRoutes />
+      </WouterRouter>
+    </SentryErrorBoundary>
   );
 }
 

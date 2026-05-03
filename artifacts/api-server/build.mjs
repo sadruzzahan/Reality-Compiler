@@ -62,7 +62,11 @@ async function buildAll() {
       "@swc/*",
       "@aws-sdk/*",
       "@azure/*",
-      "@opentelemetry/*",
+      // NOTE: @opentelemetry/* is intentionally NOT externalized because
+      // @sentry/node imports a small subset of OpenTelemetry packages at
+      // module-load time. Externalizing them would require us to install
+      // and pin every transitive OTel dep separately. Bundling keeps the
+      // surface contained and the deploy artifact self-sufficient.
       "@google-cloud/*",
       "@google/*",
       "googleapis",

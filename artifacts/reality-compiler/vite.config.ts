@@ -57,6 +57,10 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    // Source maps are emitted but NOT deployed — see scripts/upload-sourcemaps
+    // and docs/observability.md. Sentry CLI uploads them at release time and
+    // they should be deleted from the public bundle afterwards.
+    sourcemap: true,
   },
   server: {
     port,

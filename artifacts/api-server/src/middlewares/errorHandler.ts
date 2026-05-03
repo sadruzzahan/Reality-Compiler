@@ -1,6 +1,8 @@
 import type { Request, Response, NextFunction } from "express";
 import { ApiError, type ErrorEnvelope } from "../lib/errors";
 import { logger } from "../lib/logger";
+import { captureException } from "../lib/sentry";
+import { getUserId } from "./auth";
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -65,6 +67,14 @@ export function errorHandler(
       { err, requestId: req.requestId, code: apiError.code },
       "Request failed",
     );
+    // Forward the original error (not the wrapped ApiError) so stack traces
+    // point at the real failure site. Skip 4xx noise — those are client
+    // mistakes, not crashes.
+    captureException(err, {
+      requestId: req.requestId,
+      userId: getUserId(req) ?? undefined,
+      route: `${req.method} ${req.route?.path ?? req.path}`,
+    });
   } else {
     log.warn(
       { requestId: req.requestId, code: apiError.code, status: apiError.status },
