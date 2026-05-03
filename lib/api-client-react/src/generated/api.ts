@@ -1541,14 +1541,18 @@ export const getUploadAvatarUrl = () => {
 };
 
 export const uploadAvatar = async (
-  uploadAvatarBody: Blob,
+  uploadAvatarBody: Blob | File,
   options?: RequestInit,
 ): Promise<Me> => {
+  const contentType =
+    (uploadAvatarBody as Blob).type && (uploadAvatarBody as Blob).type.length > 0
+      ? (uploadAvatarBody as Blob).type
+      : "application/octet-stream";
   return customFetch<Me>(getUploadAvatarUrl(), {
     ...options,
     method: "POST",
-    headers: { "Content-Type": "image/png", ...options?.headers },
-    body: JSON.stringify(uploadAvatarBody),
+    headers: { "Content-Type": contentType, ...options?.headers },
+    body: uploadAvatarBody,
   });
 };
 
