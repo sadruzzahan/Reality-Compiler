@@ -5,6 +5,7 @@ import { asyncHandler } from "../middlewares/asyncHandler";
 import { ApiError } from "../lib/errors";
 import { recordAudit } from "@workspace/db";
 import { logger } from "../lib/logger";
+import { sendSupportEmail } from "../lib/email";
 import { randomUUID } from "node:crypto";
 
 const router: IRouter = Router();
@@ -65,7 +66,18 @@ router.post(
       "contact message received",
     );
 
-    res.status(202).json({ ok: true, ref: targetId });
+    // Best-effort email delivery to the support inbox. Failure here does
+    // NOT fail the request: the audit_log row above is the durable record
+    // and operators can replay deliveries from it.
+    const emailed = await sendSupportEmail({
+      name: input.name,
+      email: input.email,
+      topic: input.topic,
+      message: input.message,
+      ref: targetId,
+    });
+
+    res.status(202).json({ ok: true, ref: targetId, emailed });
   }),
 );
 
