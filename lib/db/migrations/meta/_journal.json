@@ -15,6 +15,13 @@
       "when": 1777773850220,
       "tag": "0001_previous_night_thrasher",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777776144509,
+      "tag": "0002_talented_scarlet_witch",
+      "breakpoints": true
     }
   ]
 }

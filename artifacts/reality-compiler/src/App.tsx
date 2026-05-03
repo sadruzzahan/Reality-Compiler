@@ -34,7 +34,15 @@ import Marketplace from "@/pages/marketplace";
 import MarketplaceDetail from "@/pages/marketplace-detail";
 import DesignerProfile from "@/pages/designer-profile";
 import MyProfile from "@/pages/my-profile";
+import TermsPage from "@/pages/legal/terms";
+import PrivacyPage from "@/pages/legal/privacy";
+import AcceptableUsePage from "@/pages/legal/acceptable-use";
+import CookiesPage from "@/pages/legal/cookies";
+import DpaPage from "@/pages/legal/dpa";
+import ContactPage from "@/pages/contact";
 import { Navbar } from "@/components/navbar";
+import { Footer } from "@/components/footer";
+import { CookieBanner } from "@/components/cookie-banner";
 
 const queryClient = new QueryClient();
 
@@ -121,12 +129,33 @@ function SignInPage() {
 
 function SignUpPage() {
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4">
+    <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-background px-4 py-10">
       <SignUp
         routing="path"
         path={`${basePath}/sign-up`}
         signInUrl={`${basePath}/sign-in`}
       />
+      <p
+        className="mt-6 text-center text-xs text-muted-foreground max-w-sm"
+        data-testid="signup-legal-notice"
+      >
+        By continuing you agree to our{" "}
+        <a href={`${basePath}/terms`} className="text-primary underline">
+          Terms
+        </a>
+        ,{" "}
+        <a
+          href={`${basePath}/acceptable-use`}
+          className="text-primary underline"
+        >
+          Acceptable Use
+        </a>
+        , and{" "}
+        <a href={`${basePath}/privacy`} className="text-primary underline">
+          Privacy Policy
+        </a>{" "}
+        and confirm you are 18 or older.
+      </p>
     </div>
   );
 }
@@ -181,6 +210,12 @@ function AppShell() {
           </Route>
           <Route path="/suppliers" component={Suppliers} />
           <Route path="/about" component={About} />
+          <Route path="/terms" component={TermsPage} />
+          <Route path="/privacy" component={PrivacyPage} />
+          <Route path="/acceptable-use" component={AcceptableUsePage} />
+          <Route path="/cookies" component={CookiesPage} />
+          <Route path="/legal/dpa" component={DpaPage} />
+          <Route path="/contact" component={ContactPage} />
           <Route path="/sessions">
             <RequireAuth>
               <Sessions />
@@ -209,6 +244,8 @@ function AppShell() {
           <Route component={NotFound} />
         </Switch>
       </main>
+      <Footer />
+      <CookieBanner />
     </div>
   );
 }
@@ -233,7 +270,8 @@ function ClerkProviderWithRoutes() {
         signUp: {
           start: {
             title: "Create your studio",
-            subtitle: "Start designing physical products from prompts",
+            subtitle:
+              "By creating an account you confirm you are 18+ and agree to our Terms of Service, Acceptable Use Policy, and Privacy Policy.",
           },
         },
       }}

@@ -413,6 +413,80 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteMyAccount
+      tags: [me]
+      summary: Soft-delete the current user's account
+      description: |
+        Soft-deletes the user's sessions, archives their marketplace
+        listings, anonymises buyer info on past orders, scrubs the
+        profile, and revokes active Clerk sessions. A scheduled purge
+        job hard-deletes objects and rows after a 30-day grace window.
+      responses:
+        "200":
+          description: Deletion summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountDeletionSummary"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /me/export:
+    get:
+      operationId: exportMyData
+      tags: [me]
+      summary: Download a JSON archive of all data tied to the current user
+      description: |
+        Streams a JSON file containing the user's profile, sessions,
+        messages, design outputs, marketplace listings, orders, and
+        derived payouts. Returned as an attachment.
+      responses:
+        "200":
+          description: Data archive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserDataExport"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/purge-deleted:
+    post:
+      operationId: purgeDeletedAccounts
+      tags: [me]
+      summary: Hard-delete accounts soft-deleted >30 days ago
+      description: |
+        Authenticated via the `x-admin-token` header against the
+        server-side `ADMIN_API_TOKEN` env var. Intended to be invoked
+        by a scheduled job.
+      parameters:
+        - in: header
+          name: x-admin-token
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Purge summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurgeSummary"
+        "401":
+          description: Invalid admin token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /me/avatar:
     post:
@@ -1167,6 +1241,60 @@ components:
             Set to `null` to clear the avatar.
           type: ["string", "null"]
           maxLength: 1024
+
+    UserDataExport:
+      type: object
+      additionalProperties: true
+      required: [exportedAt, schemaVersion, userId]
+      properties:
+        exportedAt:
+          type: string
+          format: date-time
+        schemaVersion:
+          type: integer
+          enum: [1]
+        userId:
+          type: string
+        profile:
+          nullable: true
+          type: object
+          additionalProperties: true
+        sessions:
+          type: array
+          items: { type: object, additionalProperties: true }
+        messages:
+          type: array
+          items: { type: object, additionalProperties: true }
+        outputs:
+          type: array
+          items: { type: object, additionalProperties: true }
+        listings:
+          type: array
+          items: { type: object, additionalProperties: true }
+        orders:
+          type: array
+          items: { type: object, additionalProperties: true }
+        payouts:
+          type: array
+          items: { type: object, additionalProperties: true }
+
+    AccountDeletionSummary:
+      type: object
+      required: [sessionsDeleted, listingsDeleted, ordersAnonymised, anonId]
+      properties:
+        sessionsDeleted: { type: integer }
+        listingsDeleted: { type: integer }
+        ordersAnonymised: { type: integer }
+        anonId: { type: string }
+
+    PurgeSummary:
+      type: object
+      required: [usersPurged, sessionsPurged, listingsPurged, objectsDeleted]
+      properties:
+        usersPurged: { type: integer }
+        sessionsPurged: { type: integer }
+        listingsPurged: { type: integer }
+        objectsDeleted: { type: integer }
 
     PublishListingInput:
       type: object

@@ -17,6 +17,7 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AccountDeletionSummary,
   CreateSessionInput,
   DesignMessage,
   DesignSession,
@@ -34,11 +35,13 @@ import type {
   OrderSummary,
   PlaceOrderInput,
   PublishListingInput,
+  PurgeSummary,
   Quote,
   SendMessageInput,
   SessionStats,
   Supplier,
   UpdateMyProfileInput,
+  UserDataExport,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -1526,6 +1529,256 @@ export function useGetMe<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Soft-deletes the user's sessions, archives their marketplace
+listings, anonymises buyer info on past orders, scrubs the
+profile, and revokes active Clerk sessions. A scheduled purge
+job hard-deletes objects and rows after a 30-day grace window.
+
+ * @summary Soft-delete the current user's account
+ */
+export const getDeleteMyAccountUrl = () => {
+  return `/api/me`;
+};
+
+export const deleteMyAccount = async (
+  options?: RequestInit,
+): Promise<AccountDeletionSummary> => {
+  return customFetch<AccountDeletionSummary>(getDeleteMyAccountUrl(), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteMyAccountMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteMyAccount>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteMyAccount>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["deleteMyAccount"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteMyAccount>>,
+    void
+  > = () => {
+    return deleteMyAccount(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteMyAccountMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteMyAccount>>
+>;
+
+export type DeleteMyAccountMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Soft-delete the current user's account
+ */
+export const useDeleteMyAccount = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteMyAccount>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteMyAccount>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getDeleteMyAccountMutationOptions(options));
+};
+
+/**
+ * Streams a JSON file containing the user's profile, sessions,
+messages, design outputs, marketplace listings, orders, and
+derived payouts. Returned as an attachment.
+
+ * @summary Download a JSON archive of all data tied to the current user
+ */
+export const getExportMyDataUrl = () => {
+  return `/api/me/export`;
+};
+
+export const exportMyData = async (
+  options?: RequestInit,
+): Promise<UserDataExport> => {
+  return customFetch<UserDataExport>(getExportMyDataUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getExportMyDataQueryKey = () => {
+  return [`/api/me/export`] as const;
+};
+
+export const getExportMyDataQueryOptions = <
+  TData = Awaited<ReturnType<typeof exportMyData>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof exportMyData>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getExportMyDataQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof exportMyData>>> = ({
+    signal,
+  }) => exportMyData({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof exportMyData>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ExportMyDataQueryResult = NonNullable<
+  Awaited<ReturnType<typeof exportMyData>>
+>;
+export type ExportMyDataQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Download a JSON archive of all data tied to the current user
+ */
+
+export function useExportMyData<
+  TData = Awaited<ReturnType<typeof exportMyData>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof exportMyData>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getExportMyDataQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Authenticated via the `x-admin-token` header against the
+server-side `ADMIN_API_TOKEN` env var. Intended to be invoked
+by a scheduled job.
+
+ * @summary Hard-delete accounts soft-deleted >30 days ago
+ */
+export const getPurgeDeletedAccountsUrl = () => {
+  return `/api/admin/purge-deleted`;
+};
+
+export const purgeDeletedAccounts = async (
+  options?: RequestInit,
+): Promise<PurgeSummary> => {
+  return customFetch<PurgeSummary>(getPurgeDeletedAccountsUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getPurgeDeletedAccountsMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof purgeDeletedAccounts>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof purgeDeletedAccounts>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["purgeDeletedAccounts"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof purgeDeletedAccounts>>,
+    void
+  > = () => {
+    return purgeDeletedAccounts(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PurgeDeletedAccountsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof purgeDeletedAccounts>>
+>;
+
+export type PurgeDeletedAccountsMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Hard-delete accounts soft-deleted >30 days ago
+ */
+export const usePurgeDeletedAccounts = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof purgeDeletedAccounts>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof purgeDeletedAccounts>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getPurgeDeletedAccountsMutationOptions(options));
+};
 
 /**
  * Streams an image (PNG, JPEG, or WebP, max 4 MB) directly into

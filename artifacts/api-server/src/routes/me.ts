@@ -15,6 +15,8 @@ import {
   deleteObjectByUrl,
   streamUpload,
 } from "../lib/objectStorage";
+import { buildUserDataExport } from "../lib/dataExport";
+import { softDeleteAccount } from "../lib/accountDeletion";
 
 const MAX_AVATAR_BYTES = 4 * 1024 * 1024; // 4 MB
 const ALLOWED_AVATAR_TYPES = new Set([
@@ -200,6 +202,38 @@ router.post(
     }
 
     res.json(await buildMeResponse(userId));
+  }),
+);
+
+router.get(
+  "/me/export",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const userId = req.userId!;
+    const data = await buildUserDataExport(userId);
+    const filename = `reality-compiler-export-${userId}-${new Date()
+      .toISOString()
+      .slice(0, 10)}.json`;
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${filename}"`,
+    );
+    res.send(JSON.stringify(data, null, 2));
+  }),
+);
+
+router.delete(
+  "/me",
+  requireAuth,
+  mutateLimiter,
+  asyncHandler(async (req, res) => {
+    const userId = req.userId!;
+    const summary = await softDeleteAccount(
+      userId,
+      (req as { id?: string }).id,
+    );
+    res.json(summary);
   }),
 );
 

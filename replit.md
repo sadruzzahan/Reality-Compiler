@@ -29,3 +29,12 @@ Clerk Auth (Replit-managed) wraps the React app. Sign-in/sign-up at `/sign-in/*?
 - Routes: `GET /api/marketplace/listings?sort=`, `POST /api/marketplace/listings` (publish, upserts by sessionId), `GET /api/marketplace/listings/{id}`, `DELETE /api/marketplace/listings/{id}`, `GET /api/marketplace/profile/{userId}`.
 - Seed publishes any `system-seed` user sessions on startup so the marketplace is never empty for guests.
 - Frontend pages: `marketplace.tsx`, `marketplace-detail.tsx` (with order dialog), `designer-profile.tsx`. Publish action via `components/publish-dialog.tsx` on session-workspace.
+
+## Privacy & data rights (Task #10)
+
+- **Static legal pages** at `/terms`, `/privacy`, `/acceptable-use`, `/cookies`, `/legal/dpa`, `/contact`. Layout in `components/legal-page.tsx` (sticky TOC + last-updated). Linked from `components/footer.tsx` (mounted in `AppShell`) and from the sign-up page legal notice.
+- **Cookie banner**: `components/cookie-banner.tsx` + `lib/cookie-consent.ts` (`useCookieConsent`). Choices persist in localStorage under `rc_cookie_consent_v1`; reset from `/cookies`. No third-party tags.
+- **GET `/api/me/export`** — auth-only. Streams a JSON archive (profile, sessions, messages, outputs, listings, orders, derived payouts) with `Content-Disposition: attachment`. Built in `lib/dataExport.ts`.
+- **DELETE `/api/me`** — auth-only. Soft-deletes sessions & listings, anonymises buyer info on past orders (shipping fields scrubbed, `userId` → `deleted-user:<sha256-prefix>`), remaps `designerUserId` to the same anon id so payouts stay aggregable, scrubs `user_profiles` row + sets `deletedAt`, and revokes active Clerk sessions. Frontend (`components/privacy-data-card.tsx`) signs the user out with `useClerk().signOut()`.
+- **POST `/api/admin/purge-deleted`** — gated by `x-admin-token` header matching `ADMIN_API_TOKEN` env var. Hard-deletes profiles soft-deleted >30d ago, drops their sessions/listings/objects, and `clerkClient.users.deleteUser`s them. Anonymised orders are retained for tax. Set `ADMIN_API_TOKEN` and call from a cron / scheduled deployment.
+- **Schema**: `user_profiles.deletedAt` added (indexed) as the soft-delete grace marker for accounts.

@@ -663,6 +663,59 @@ export const GetMeResponse = zod.object({
 });
 
 /**
+ * Soft-deletes the user's sessions, archives their marketplace
+listings, anonymises buyer info on past orders, scrubs the
+profile, and revokes active Clerk sessions. A scheduled purge
+job hard-deletes objects and rows after a 30-day grace window.
+
+ * @summary Soft-delete the current user's account
+ */
+export const DeleteMyAccountResponse = zod.object({
+  sessionsDeleted: zod.number(),
+  listingsDeleted: zod.number(),
+  ordersAnonymised: zod.number(),
+  anonId: zod.string(),
+});
+
+/**
+ * Streams a JSON file containing the user's profile, sessions,
+messages, design outputs, marketplace listings, orders, and
+derived payouts. Returned as an attachment.
+
+ * @summary Download a JSON archive of all data tied to the current user
+ */
+export const ExportMyDataResponse = zod.object({
+  exportedAt: zod.coerce.date(),
+  schemaVersion: zod.literal(1),
+  userId: zod.string(),
+  profile: zod.record(zod.string(), zod.unknown()).nullish(),
+  sessions: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
+  messages: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
+  outputs: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
+  listings: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
+  orders: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
+  payouts: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
+});
+
+/**
+ * Authenticated via the `x-admin-token` header against the
+server-side `ADMIN_API_TOKEN` env var. Intended to be invoked
+by a scheduled job.
+
+ * @summary Hard-delete accounts soft-deleted >30 days ago
+ */
+export const PurgeDeletedAccountsHeader = zod.object({
+  "x-admin-token": zod.string(),
+});
+
+export const PurgeDeletedAccountsResponse = zod.object({
+  usersPurged: zod.number(),
+  sessionsPurged: zod.number(),
+  listingsPurged: zod.number(),
+  objectsDeleted: zod.number(),
+});
+
+/**
  * Streams an image (PNG, JPEG, or WebP, max 4 MB) directly into
 object storage; the request body is the raw image bytes and the
 `Content-Type` header selects the image type. Returns the updated

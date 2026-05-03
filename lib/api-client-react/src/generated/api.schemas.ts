@@ -267,6 +267,55 @@ Set to `null` to clear the avatar.
   avatarUrl?: string | null;
 }
 
+export type UserDataExportSchemaVersion =
+  (typeof UserDataExportSchemaVersion)[keyof typeof UserDataExportSchemaVersion];
+
+export const UserDataExportSchemaVersion = {
+  NUMBER_1: 1,
+} as const;
+
+export type UserDataExportProfile = { [key: string]: unknown } | null;
+
+export type UserDataExportSessionsItem = { [key: string]: unknown };
+
+export type UserDataExportMessagesItem = { [key: string]: unknown };
+
+export type UserDataExportOutputsItem = { [key: string]: unknown };
+
+export type UserDataExportListingsItem = { [key: string]: unknown };
+
+export type UserDataExportOrdersItem = { [key: string]: unknown };
+
+export type UserDataExportPayoutsItem = { [key: string]: unknown };
+
+export interface UserDataExport {
+  exportedAt: string;
+  schemaVersion: UserDataExportSchemaVersion;
+  userId: string;
+  profile?: UserDataExportProfile;
+  sessions?: UserDataExportSessionsItem[];
+  messages?: UserDataExportMessagesItem[];
+  outputs?: UserDataExportOutputsItem[];
+  listings?: UserDataExportListingsItem[];
+  orders?: UserDataExportOrdersItem[];
+  payouts?: UserDataExportPayoutsItem[];
+  [key: string]: unknown;
+}
+
+export interface AccountDeletionSummary {
+  sessionsDeleted: number;
+  listingsDeleted: number;
+  ordersAnonymised: number;
+  anonId: string;
+}
+
+export interface PurgeSummary {
+  usersPurged: number;
+  sessionsPurged: number;
+  listingsPurged: number;
+  objectsDeleted: number;
+}
+
 export interface PublishListingInput {
   sessionId: number;
   title: string;
