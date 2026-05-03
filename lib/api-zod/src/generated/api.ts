@@ -608,6 +608,36 @@ export const GetMeResponse = zod.object({
   firstName: zod.string().nullish(),
   lastName: zod.string().nullish(),
   imageUrl: zod.string().nullish(),
+  displayName: zod.string().nullish(),
+  bio: zod.string().nullish(),
+  avatarUrl: zod.string().nullish(),
+});
+
+/**
+ * @summary Update the authenticated user's public designer profile
+ */
+export const updateMyProfileBodyDisplayNameMax = 80;
+
+export const updateMyProfileBodyBioMax = 500;
+
+export const updateMyProfileBodyAvatarUrlMax = 1024;
+
+export const UpdateMyProfileBody = zod.object({
+  displayName: zod.string().max(updateMyProfileBodyDisplayNameMax).nullish(),
+  bio: zod.string().max(updateMyProfileBodyBioMax).nullish(),
+  avatarUrl: zod.string().max(updateMyProfileBodyAvatarUrlMax).nullish(),
+});
+
+export const UpdateMyProfileResponse = zod.object({
+  userId: zod.string(),
+  handle: zod.string(),
+  email: zod.string().nullish(),
+  firstName: zod.string().nullish(),
+  lastName: zod.string().nullish(),
+  imageUrl: zod.string().nullish(),
+  displayName: zod.string().nullish(),
+  bio: zod.string().nullish(),
+  avatarUrl: zod.string().nullish(),
 });
 
 /**
@@ -623,6 +653,8 @@ export const ListMarketplaceListingsResponseItem = zod.object({
   sessionId: zod.number(),
   userId: zod.string(),
   creatorHandle: zod.string(),
+  creatorDisplayName: zod.string().nullish(),
+  creatorAvatarUrl: zod.string().nullish(),
   title: zod.string(),
   category: zod.string(),
   description: zod.string(),
@@ -762,12 +794,17 @@ export const GetDesignerProfileParams = zod.object({
 export const GetDesignerProfileResponse = zod.object({
   userId: zod.string(),
   handle: zod.string(),
+  displayName: zod.string().nullish(),
+  bio: zod.string().nullish(),
+  avatarUrl: zod.string().nullish(),
   listings: zod.array(
     zod.object({
       id: zod.number(),
       sessionId: zod.number(),
       userId: zod.string(),
       creatorHandle: zod.string(),
+      creatorDisplayName: zod.string().nullish(),
+      creatorAvatarUrl: zod.string().nullish(),
       title: zod.string(),
       category: zod.string(),
       description: zod.string(),

@@ -11,6 +11,10 @@ export interface MarketplaceListingSummary {
   sessionId: number;
   userId: string;
   creatorHandle: string;
+  /** @nullable */
+  creatorDisplayName?: string | null;
+  /** @nullable */
+  creatorAvatarUrl?: string | null;
   title: string;
   category: string;
   description: string;

@@ -43,3 +43,4 @@ export * from "./sessionStats";
 export * from "./shippingAddress";
 export * from "./supplier";
 export * from "./supplierCapacityLevel";
+export * from "./updateMyProfileInput";

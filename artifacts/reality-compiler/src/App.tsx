@@ -32,6 +32,7 @@ import About from "@/pages/about";
 import Marketplace from "@/pages/marketplace";
 import MarketplaceDetail from "@/pages/marketplace-detail";
 import DesignerProfile from "@/pages/designer-profile";
+import MyProfile from "@/pages/my-profile";
 import { Navbar } from "@/components/navbar";
 
 const queryClient = new QueryClient();
@@ -172,6 +173,11 @@ function AppShell() {
           <Route path="/marketplace" component={Marketplace} />
           <Route path="/marketplace/:id" component={MarketplaceDetail} />
           <Route path="/designers/:userId" component={DesignerProfile} />
+          <Route path="/my-profile">
+            <RequireAuth>
+              <MyProfile />
+            </RequireAuth>
+          </Route>
           <Route path="/suppliers" component={Suppliers} />
           <Route path="/about" component={About} />
           <Route path="/sessions">

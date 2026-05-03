@@ -149,16 +149,30 @@ export default function Marketplace() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="flex items-center justify-between pt-0">
-                    <div className="flex flex-col">
-                      <span className="font-mono text-xs text-muted-foreground">
-                        by @{l.creatorHandle}
-                      </span>
-                      {l.orderCount > 0 && (
-                        <span className="text-xs text-emerald-400 flex items-center gap-1 mt-0.5">
-                          <TrendingUp className="w-3 h-3" />
-                          {l.orderCount} order{l.orderCount === 1 ? "" : "s"}
+                    <div className="flex items-center gap-2">
+                      {l.creatorAvatarUrl ? (
+                        <img
+                          src={l.creatorAvatarUrl}
+                          alt={l.creatorDisplayName ?? l.creatorHandle}
+                          className="w-7 h-7 rounded-full object-cover border border-border/40"
+                        />
+                      ) : null}
+                      <div className="flex flex-col">
+                        {l.creatorDisplayName ? (
+                          <span className="text-xs font-medium line-clamp-1">
+                            {l.creatorDisplayName}
+                          </span>
+                        ) : null}
+                        <span className="font-mono text-xs text-muted-foreground">
+                          @{l.creatorHandle}
                         </span>
-                      )}
+                        {l.orderCount > 0 && (
+                          <span className="text-xs text-emerald-400 flex items-center gap-1 mt-0.5">
+                            <TrendingUp className="w-3 h-3" />
+                            {l.orderCount} order{l.orderCount === 1 ? "" : "s"}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="text-right">
                       <div className="font-mono font-bold text-lg">

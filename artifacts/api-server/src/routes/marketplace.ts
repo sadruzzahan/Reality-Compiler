@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, and, asc, sql } from "drizzle-orm";
+import { eq, desc, and, asc, sql, inArray } from "drizzle-orm";
 import { clerkClient } from "@clerk/express";
 import {
   db,
@@ -9,7 +9,9 @@ import {
   ordersTable,
   quotesTable,
   suppliersTable,
+  userProfilesTable,
   type MarketplaceListing,
+  type UserProfile,
   type Quote,
   type Supplier,
 } from "@workspace/db";
@@ -41,7 +43,22 @@ async function resolveHandle(userId: string): Promise<string> {
   }
 }
 
-async function buildSummary(listing: MarketplaceListing) {
+async function loadProfilesByUserIds(
+  userIds: string[],
+): Promise<Map<string, UserProfile>> {
+  const unique = Array.from(new Set(userIds));
+  if (unique.length === 0) return new Map();
+  const rows = await db
+    .select()
+    .from(userProfilesTable)
+    .where(inArray(userProfilesTable.userId, unique));
+  return new Map(rows.map((r) => [r.userId, r]));
+}
+
+async function buildSummary(
+  listing: MarketplaceListing,
+  profile?: UserProfile | null,
+) {
   const [output] = await db
     .select()
     .from(designOutputsTable)
@@ -52,11 +69,17 @@ async function buildSummary(listing: MarketplaceListing) {
     .select({ c: sql<number>`count(*)::int` })
     .from(ordersTable)
     .where(eq(ordersTable.marketplaceListingId, listing.id));
+  const resolvedProfile =
+    profile === undefined
+      ? (await loadProfilesByUserIds([listing.userId])).get(listing.userId) ?? null
+      : profile;
   return {
     id: listing.id,
     sessionId: listing.sessionId,
     userId: listing.userId,
     creatorHandle: listing.creatorHandle,
+    creatorDisplayName: resolvedProfile?.displayName ?? null,
+    creatorAvatarUrl: resolvedProfile?.avatarUrl ?? null,
     title: listing.title,
     category: listing.category,
     description: listing.description,
@@ -105,7 +128,10 @@ router.get("/marketplace/listings", async (req, res): Promise<void> => {
     .from(marketplaceListingsTable)
     .where(and(...conds));
 
-  const summaries = await Promise.all(rows.map(buildSummary));
+  const profileMap = await loadProfilesByUserIds(rows.map((r) => r.userId));
+  const summaries = await Promise.all(
+    rows.map((r) => buildSummary(r, profileMap.get(r.userId) ?? null)),
+  );
 
   switch (sort) {
     case "price-asc":
@@ -392,7 +418,11 @@ router.get(
       )
       .orderBy(desc(marketplaceListingsTable.createdAt));
 
-    const summaries = await Promise.all(listings.map(buildSummary));
+    const profile =
+      (await loadProfilesByUserIds([targetUserId])).get(targetUserId) ?? null;
+    const summaries = await Promise.all(
+      listings.map((l) => buildSummary(l, profile)),
+    );
     const totalOrders = summaries.reduce((sum, s) => sum + s.orderCount, 0);
     const handle =
       listings[0]?.creatorHandle ?? (await resolveHandle(targetUserId));
@@ -400,6 +430,9 @@ router.get(
     res.json({
       userId: targetUserId,
       handle,
+      displayName: profile?.displayName ?? null,
+      bio: profile?.bio ?? null,
+      avatarUrl: profile?.avatarUrl ?? null,
       listings: summaries,
       totalListings: summaries.length,
       totalOrders,

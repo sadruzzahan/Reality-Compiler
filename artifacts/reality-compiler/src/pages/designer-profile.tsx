@@ -39,16 +39,37 @@ export default function DesignerProfile() {
         <Card className="mb-8 border-border/60">
           <CardContent className="pt-8 pb-6">
             <div className="flex flex-col md:flex-row md:items-center gap-6">
-              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                <User className="w-10 h-10 text-primary" />
+              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center overflow-hidden">
+                {data.avatarUrl ? (
+                  <img
+                    src={data.avatarUrl}
+                    alt={data.displayName ?? data.handle}
+                    className="w-full h-full object-cover"
+                    data-testid="img-designer-avatar"
+                  />
+                ) : (
+                  <User className="w-10 h-10 text-primary" />
+                )}
               </div>
               <div className="flex-1">
-                <h1 className="text-3xl font-bold font-sans">
-                  @{data.handle}
+                <h1
+                  className="text-3xl font-bold font-sans"
+                  data-testid="text-designer-name"
+                >
+                  {data.displayName ?? `@${data.handle}`}
                 </h1>
                 <p className="text-muted-foreground mt-1 font-mono text-sm">
-                  Designer · Reality Compiler studio
+                  {data.displayName ? `@${data.handle} · ` : ""}Designer ·
+                  Reality Compiler studio
                 </p>
+                {data.bio ? (
+                  <p
+                    className="mt-3 text-sm text-foreground/80 max-w-2xl whitespace-pre-line"
+                    data-testid="text-designer-bio"
+                  >
+                    {data.bio}
+                  </p>
+                ) : null}
               </div>
               <div className="grid grid-cols-2 gap-4 text-center">
                 <div>

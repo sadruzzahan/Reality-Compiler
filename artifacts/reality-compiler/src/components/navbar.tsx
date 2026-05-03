@@ -55,10 +55,16 @@ function UserMenu() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem
+          onSelect={() => setLocation("/my-profile")}
+          data-testid="link-edit-profile"
+        >
+          Edit my profile
+        </DropdownMenuItem>
+        <DropdownMenuItem
           onSelect={() => setLocation(`/designers/${user.id}`)}
           data-testid="link-my-profile"
         >
-          My designer profile
+          My public profile
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => setLocation("/sessions")}>
           My sessions

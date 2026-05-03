@@ -17,4 +17,10 @@ export interface Me {
   lastName?: string | null;
   /** @nullable */
   imageUrl?: string | null;
+  /** @nullable */
+  displayName?: string | null;
+  /** @nullable */
+  bio?: string | null;
+  /** @nullable */
+  avatarUrl?: string | null;
 }

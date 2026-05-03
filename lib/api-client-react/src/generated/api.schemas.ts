@@ -232,6 +232,30 @@ export interface Me {
   lastName?: string | null;
   /** @nullable */
   imageUrl?: string | null;
+  /** @nullable */
+  displayName?: string | null;
+  /** @nullable */
+  bio?: string | null;
+  /** @nullable */
+  avatarUrl?: string | null;
+}
+
+export interface UpdateMyProfileInput {
+  /**
+   * @maxLength 80
+   * @nullable
+   */
+  displayName?: string | null;
+  /**
+   * @maxLength 500
+   * @nullable
+   */
+  bio?: string | null;
+  /**
+   * @maxLength 1024
+   * @nullable
+   */
+  avatarUrl?: string | null;
 }
 
 export interface PublishListingInput {
@@ -247,6 +271,10 @@ export interface MarketplaceListingSummary {
   sessionId: number;
   userId: string;
   creatorHandle: string;
+  /** @nullable */
+  creatorDisplayName?: string | null;
+  /** @nullable */
+  creatorAvatarUrl?: string | null;
   title: string;
   category: string;
   description: string;
@@ -280,6 +308,12 @@ export interface MarketplaceListingDetail {
 export interface DesignerProfile {
   userId: string;
   handle: string;
+  /** @nullable */
+  displayName?: string | null;
+  /** @nullable */
+  bio?: string | null;
+  /** @nullable */
+  avatarUrl?: string | null;
   listings: MarketplaceListingSummary[];
   totalListings: number;
   totalOrders: number;

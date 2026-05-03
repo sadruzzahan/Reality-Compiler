@@ -10,6 +10,12 @@ import type { MarketplaceListingSummary } from "./marketplaceListingSummary";
 export interface DesignerProfile {
   userId: string;
   handle: string;
+  /** @nullable */
+  displayName?: string | null;
+  /** @nullable */
+  bio?: string | null;
+  /** @nullable */
+  avatarUrl?: string | null;
   listings: MarketplaceListingSummary[];
   totalListings: number;
   totalOrders: number;
