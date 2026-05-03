@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { randomUUID } from "crypto";
 import { clerkClient } from "@clerk/express";
-import { eq } from "drizzle-orm";
+import { eq } from "@workspace/db";
 import { db, userProfilesTable, type UserProfile } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { handleForUser } from "../lib/handles";
@@ -17,6 +17,13 @@ import {
 } from "../lib/objectStorage";
 import { buildUserDataExport } from "../lib/dataExport";
 import { softDeleteAccount } from "../lib/accountDeletion";
+import {
+  isStripeConfigured,
+  createConnectAccountLink,
+  getAccountStatus,
+  getAppBaseUrl,
+  type ConnectAccountStatus,
+} from "../lib/stripe";
 
 const MAX_AVATAR_BYTES = 4 * 1024 * 1024; // 4 MB
 const ALLOWED_AVATAR_TYPES = new Set([
@@ -220,6 +227,135 @@ router.get(
       `attachment; filename="${filename}"`,
     );
     res.send(JSON.stringify(data, null, 2));
+  }),
+);
+
+/**
+ * Stripe Connect Express onboarding entry point. Idempotently creates a
+ * Connect account (if needed) and returns a one-shot onboarding URL for
+ * the designer to complete KYC + payout setup. The status row in
+ * `user_profiles.stripe_account_status` is refreshed from Stripe on
+ * every call so the UI shows accurate state.
+ */
+router.post(
+  "/me/connect-account",
+  requireAuth,
+  mutateLimiter,
+  asyncHandler(async (req, res) => {
+    if (!isStripeConfigured()) {
+      throw new ApiError(
+        "INTERNAL",
+        "Stripe is not configured on the server (STRIPE_SECRET_KEY missing).",
+      );
+    }
+    const userId = req.userId!;
+    let email: string | null = null;
+    try {
+      const u = await clerkClient.users.getUser(userId);
+      email =
+        u.primaryEmailAddress?.emailAddress ??
+        u.emailAddresses[0]?.emailAddress ??
+        null;
+    } catch {
+      // non-fatal
+    }
+
+    const [existing] = await db
+      .select()
+      .from(userProfilesTable)
+      .where(eq(userProfilesTable.userId, userId));
+
+    const origin =
+      (req.headers["origin"] as string | undefined) ?? getAppBaseUrl();
+    const refreshUrl = `${origin}/payouts?stripe=refresh`;
+    const returnUrl = `${origin}/payouts?stripe=connected`;
+
+    const { account, link } = await createConnectAccountLink({
+      userId,
+      email,
+      existingAccountId: existing?.stripeAccountId ?? null,
+      refreshUrl,
+      returnUrl,
+    });
+
+    const status: ConnectAccountStatus =
+      account.charges_enabled && account.payouts_enabled
+        ? "enabled"
+        : account.details_submitted
+          ? "restricted"
+          : "pending";
+
+    await db
+      .insert(userProfilesTable)
+      .values({
+        userId,
+        stripeAccountId: account.id,
+        stripeAccountStatus: status,
+      })
+      .onConflictDoUpdate({
+        target: userProfilesTable.userId,
+        set: {
+          stripeAccountId: account.id,
+          stripeAccountStatus: status,
+          updatedAt: new Date(),
+        },
+      });
+
+    res.json({
+      accountId: account.id,
+      status,
+      onboardingUrl: link.url,
+      expiresAt: new Date(link.expires_at * 1000).toISOString(),
+    });
+  }),
+);
+
+router.get(
+  "/me/connect-status",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const userId = req.userId!;
+    const [profile] = await db
+      .select()
+      .from(userProfilesTable)
+      .where(eq(userProfilesTable.userId, userId));
+    if (!profile?.stripeAccountId) {
+      res.json({
+        configured: isStripeConfigured(),
+        accountId: null,
+        status: null,
+        chargesEnabled: false,
+        payoutsEnabled: false,
+        detailsSubmitted: false,
+      });
+      return;
+    }
+    if (!isStripeConfigured()) {
+      res.json({
+        configured: false,
+        accountId: profile.stripeAccountId,
+        status: profile.stripeAccountStatus ?? "pending",
+        chargesEnabled: false,
+        payoutsEnabled: false,
+        detailsSubmitted: false,
+      });
+      return;
+    }
+    const { account, status } = await getAccountStatus(profile.stripeAccountId);
+    if (status !== profile.stripeAccountStatus) {
+      await db
+        .update(userProfilesTable)
+        .set({ stripeAccountStatus: status, updatedAt: new Date() })
+        .where(eq(userProfilesTable.userId, userId));
+    }
+    res.json({
+      configured: true,
+      accountId: account.id,
+      status,
+      chargesEnabled: account.charges_enabled ?? false,
+      payoutsEnabled: account.payouts_enabled ?? false,
+      detailsSubmitted: account.details_submitted ?? false,
+    });
   }),
 );
 

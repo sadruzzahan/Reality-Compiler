@@ -1,11 +1,24 @@
 import { Link } from "wouter";
+import { useEffect } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { Banknote, Store, Sparkles, TrendingUp } from "lucide-react";
+import {
+  Banknote,
+  Store,
+  Sparkles,
+  TrendingUp,
+  CreditCard,
+  CheckCircle2,
+  AlertTriangle,
+  Loader2,
+} from "lucide-react";
 import {
   useListDesignerOrders,
+  useGetConnectStatus,
+  useCreateConnectAccount,
   type OrderSummaryStatus,
 } from "@workspace/api-client-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { usePrivatePageHead } from "@/lib/seo-defaults";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -54,6 +67,169 @@ function payoutStatusLabel(status: OrderSummaryStatus): {
   };
 }
 
+function paymentStatusBadge(s: string | undefined | null) {
+  switch (s) {
+    case "paid":
+      return {
+        label: "Paid",
+        className:
+          "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
+      };
+    case "refunded":
+      return {
+        label: "Refunded",
+        className:
+          "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30",
+      };
+    case "partially_refunded":
+      return {
+        label: "Partial refund",
+        className:
+          "bg-orange-500/15 text-orange-700 dark:text-orange-400 border-orange-500/30",
+      };
+    case "failed":
+      return {
+        label: "Failed",
+        className:
+          "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30",
+      };
+    case "pending_payment":
+    default:
+      return {
+        label: "Awaiting payment",
+        className:
+          "bg-muted text-muted-foreground border-border",
+      };
+  }
+}
+
+function ConnectOnboardingCard() {
+  const { toast } = useToast();
+  const {
+    data: status,
+    isLoading,
+    refetch,
+  } = useGetConnectStatus();
+  const startOnboarding = useCreateConnectAccount();
+
+  // Refresh after Stripe redirects back from onboarding so the panel
+  // immediately reflects the new account state.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("stripe") === "connected" || params.get("stripe") === "refresh") {
+      refetch();
+    }
+  }, [refetch]);
+
+  const handleConnect = async () => {
+    try {
+      const res = await startOnboarding.mutateAsync();
+      window.location.assign(res.onboardingUrl);
+    } catch (e) {
+      toast({
+        title: "Couldn't start Stripe onboarding",
+        description: e instanceof Error ? e.message : "Try again",
+        variant: "destructive",
+      });
+    }
+  };
+
+  if (isLoading) {
+    return <Skeleton className="h-32 w-full mb-6 rounded-xl" />;
+  }
+  if (!status?.configured) {
+    return (
+      <Card className="mb-6 border-amber-500/30 bg-amber-500/5">
+        <CardContent className="pt-6 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />
+          <div className="text-sm">
+            <div className="font-medium">Stripe payouts not configured</div>
+            <p className="text-muted-foreground mt-1 text-xs font-mono">
+              The platform admin hasn't enabled Stripe yet. Earnings will
+              accrue but payouts can't be transferred until the
+              <code className="mx-1 px-1 py-0.5 rounded bg-muted">
+                STRIPE_SECRET_KEY
+              </code>
+              secret is set.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const enabled = status.status === "enabled";
+  const restricted = status.status === "restricted";
+  const startedButIncomplete = !!status.accountId && !enabled;
+  return (
+    <Card
+      className={`mb-6 ${enabled ? "border-emerald-500/30 bg-emerald-500/5" : "border-primary/30 bg-primary/5"}`}
+      data-testid="card-connect-status"
+    >
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-mono uppercase flex items-center gap-2">
+          <CreditCard className="w-4 h-4" />
+          Stripe payout account
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="pt-2 flex items-start justify-between gap-4 flex-wrap">
+        <div className="text-sm">
+          {enabled ? (
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              <span className="font-medium">
+                Connected — payouts enabled.
+              </span>
+            </div>
+          ) : restricted ? (
+            <div>
+              <div className="font-medium text-amber-700 dark:text-amber-400">
+                Action required
+              </div>
+              <p className="text-xs text-muted-foreground font-mono mt-1 max-w-md">
+                Stripe needs more information before payouts can be made.
+                Continue onboarding to add the missing details.
+              </p>
+            </div>
+          ) : startedButIncomplete ? (
+            <div>
+              <div className="font-medium">Onboarding incomplete</div>
+              <p className="text-xs text-muted-foreground font-mono mt-1 max-w-md">
+                Finish your Stripe onboarding to start receiving 70% of
+                every license sale on your published designs.
+              </p>
+            </div>
+          ) : (
+            <div>
+              <div className="font-medium">Get paid for your designs</div>
+              <p className="text-xs text-muted-foreground font-mono mt-1 max-w-md">
+                Connect a Stripe account to receive 70% of the license
+                price on every marketplace sale, paid out on Stripe's
+                standard schedule.
+              </p>
+            </div>
+          )}
+        </div>
+        {!enabled && (
+          <Button
+            onClick={handleConnect}
+            disabled={startOnboarding.isPending}
+            className="font-mono"
+            data-testid="button-connect-stripe"
+          >
+            {startOnboarding.isPending ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <CreditCard className="w-4 h-4 mr-2" />
+            )}
+            {startedButIncomplete ? "Resume onboarding" : "Connect with Stripe"}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Payouts() {
   usePrivatePageHead(
     "Designer payouts",
@@ -83,6 +259,8 @@ export default function Payouts() {
             </p>
           </div>
         </div>
+
+        <ConnectOnboardingCard />
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
           <Card data-testid="card-payouts-total">
@@ -164,6 +342,7 @@ export default function Payouts() {
                   <TableHead className="font-mono text-xs">BUYER</TableHead>
                   <TableHead className="font-mono text-xs text-right">QTY</TableHead>
                   <TableHead className="font-mono text-xs">STATUS</TableHead>
+                  <TableHead className="font-mono text-xs">PAYMENT</TableHead>
                   <TableHead className="font-mono text-xs">PAYOUT</TableHead>
                   <TableHead className="font-mono text-xs text-right">AMOUNT</TableHead>
                   <TableHead className="font-mono text-xs text-right">PLACED</TableHead>
@@ -172,6 +351,7 @@ export default function Payouts() {
               <TableBody>
                 {orders.map((order) => {
                   const ps = payoutStatusLabel(order.status);
+                  const pay = paymentStatusBadge(order.paymentStatus);
                   return (
                     <TableRow
                       key={order.id}
@@ -218,6 +398,15 @@ export default function Payouts() {
                           className={`font-mono text-[10px] uppercase ${statusColorClass(order.status)}`}
                         >
                           {order.status.replace("_", " ")}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={`font-mono text-[10px] uppercase ${pay.className}`}
+                          data-testid={`badge-payment-status-${order.id}`}
+                        >
+                          {pay.label}
                         </Badge>
                       </TableCell>
                       <TableCell>

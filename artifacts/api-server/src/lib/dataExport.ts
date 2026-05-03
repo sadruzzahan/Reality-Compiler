@@ -1,4 +1,4 @@
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray } from "@workspace/db";
 import {
   db,
   designSessionsTable,

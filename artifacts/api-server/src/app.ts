@@ -14,6 +14,7 @@ import { errorHandler, notFoundHandler } from "./middlewares/errorHandler";
 import { globalLimiter } from "./middlewares/rateLimits";
 import router from "./routes";
 import metricsRouter from "./routes/metrics";
+import stripeWebhookRouter from "./routes/webhooks";
 import { logger } from "./lib/logger";
 import { metricsMiddleware } from "./lib/metrics";
 
@@ -135,6 +136,13 @@ app.use(corsMiddleware());
 // Global rate limit applies to every request (after CORS preflight is handled
 // by `cors`, before any route work).
 app.use(globalLimiter);
+
+// Stripe webhook MUST be mounted before the global JSON parser so its
+// per-route `express.raw()` middleware can verify the signature against
+// the raw request bytes. Mounted under `/api` for parity with all other
+// routes (the Stripe dashboard endpoint is configured to hit
+// `/api/webhooks/stripe`).
+app.use("/api", stripeWebhookRouter);
 
 // Default JSON parser. Note: express.json only matches `application/json`
 // by default, so the binary `POST /api/me/avatar` route (image/png|jpeg|webp)

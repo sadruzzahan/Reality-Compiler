@@ -428,6 +428,16 @@ export interface OrderStatusEvent {
   at: string;
 }
 
+export type PaymentStatus = (typeof PaymentStatus)[keyof typeof PaymentStatus];
+
+export const PaymentStatus = {
+  pending_payment: "pending_payment",
+  paid: "paid",
+  failed: "failed",
+  refunded: "refunded",
+  partially_refunded: "partially_refunded",
+} as const;
+
 export type OrderSummaryStatus =
   (typeof OrderSummaryStatus)[keyof typeof OrderSummaryStatus];
 
@@ -453,6 +463,7 @@ export interface OrderSummary {
   /** @nullable */
   designerUserId?: string | null;
   leadTimeDays: number;
+  paymentStatus: PaymentStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -485,6 +496,7 @@ export interface DesignerOrderSummary {
   totalCost: number;
   payoutAmount: number;
   leadTimeDays: number;
+  paymentStatus: PaymentStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -516,8 +528,82 @@ export interface Order {
   shippingAddress: ShippingAddress;
   status: OrderStatus;
   statusHistory: OrderStatusEvent[];
+  paymentStatus: PaymentStatus;
+  refundedAmount: number;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Result of `POST /orders`. When Stripe is configured the buyer is
+redirected to `checkoutUrl` to complete payment; the order is not
+advanced past `pending_payment` until the
+`checkout.session.completed` webhook fires. In dev/offline mode
+(`STRIPE_SECRET_KEY` unset) the embedded `order` is returned
+directly with `paymentStatus = paid`.
+
+ */
+export interface PlaceOrderResponse {
+  orderId: number;
+  /** @nullable */
+  checkoutUrl: string | null;
+  requiresPayment: boolean;
+  order?: Order | null;
+}
+
+export type ConnectAccountStatus =
+  (typeof ConnectAccountStatus)[keyof typeof ConnectAccountStatus];
+
+export const ConnectAccountStatus = {
+  pending: "pending",
+  restricted: "restricted",
+  enabled: "enabled",
+} as const;
+
+export interface ConnectAccountLink {
+  accountId: string;
+  status: ConnectAccountStatus;
+  onboardingUrl: string;
+  expiresAt: string;
+}
+
+export interface ConnectStatus {
+  /** Whether the server has Stripe credentials. */
+  configured: boolean;
+  /** @nullable */
+  accountId: string | null;
+  status: ConnectAccountStatus | null;
+  chargesEnabled: boolean;
+  payoutsEnabled: boolean;
+  detailsSubmitted: boolean;
+}
+
+export type OrderRefundInputReason =
+  (typeof OrderRefundInputReason)[keyof typeof OrderRefundInputReason];
+
+export const OrderRefundInputReason = {
+  duplicate: "duplicate",
+  fraudulent: "fraudulent",
+  requested_by_customer: "requested_by_customer",
+} as const;
+
+export interface OrderRefundInput {
+  /**
+   * Dollar amount to refund. Omit (or null) for a full refund of
+the remaining balance.
+
+   * @nullable
+   */
+  amount?: number | null;
+  reason?: OrderRefundInputReason;
+}
+
+export interface OrderRefundResult {
+  orderId: number;
+  refundId: string;
+  amount: number;
+  /** @nullable */
+  status?: string | null;
 }
 
 export type ListSuppliersParams = {

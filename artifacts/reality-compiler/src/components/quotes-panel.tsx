@@ -220,10 +220,16 @@ function PlaceOrderDialog({
 
   const placeOrder = usePlaceOrder({
     mutation: {
-      onSuccess: (order) => {
+      onSuccess: (result) => {
         queryClient.invalidateQueries({ queryKey: getListOrdersQueryKey() });
         onOpenChange(false);
-        setLocation(`/orders/${order.id}`);
+        // When Stripe Checkout is required, redirect the buyer to
+        // complete payment; otherwise jump straight to the order page.
+        if (result.requiresPayment && result.checkoutUrl) {
+          window.location.assign(result.checkoutUrl);
+          return;
+        }
+        setLocation(`/orders/${result.orderId}`);
       },
     },
   });

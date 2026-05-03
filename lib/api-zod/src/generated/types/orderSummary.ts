@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { OrderSummaryStatus } from "./orderSummaryStatus";
+import type { PaymentStatus } from "./paymentStatus";
 
 export interface OrderSummary {
   id: number;
@@ -21,6 +22,7 @@ export interface OrderSummary {
   /** @nullable */
   designerUserId?: string | null;
   leadTimeDays: number;
+  paymentStatus: PaymentStatus;
   createdAt: Date;
   updatedAt: Date;
 }

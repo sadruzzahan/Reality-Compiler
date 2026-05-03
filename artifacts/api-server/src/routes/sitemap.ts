@@ -4,7 +4,7 @@ import {
   marketplaceListingsTable as marketplaceListings,
   userProfilesTable as userProfiles,
 } from "@workspace/db";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "@workspace/db";
 import { asyncHandler } from "../middlewares/asyncHandler";
 
 const router: IRouter = Router();

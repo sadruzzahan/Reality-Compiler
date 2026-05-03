@@ -5,7 +5,7 @@ import {
   designOutputsTable,
   marketplaceListingsTable,
 } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql } from "@workspace/db";
 import { logger } from "./logger";
 
 export async function seedIfEmpty(): Promise<void> {

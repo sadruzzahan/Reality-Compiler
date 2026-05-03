@@ -112,7 +112,7 @@ export default function MarketplaceDetail() {
   const handlePlaceOrder = async () => {
     if (!listing || !selectedQuoteId) return;
     try {
-      const order = await placeOrder.mutateAsync({
+      const result = await placeOrder.mutateAsync({
         data: {
           quoteId: selectedQuoteId,
           quantity: Number(quantity),
@@ -131,12 +131,27 @@ export default function MarketplaceDetail() {
       queryClient.invalidateQueries({
         queryKey: getGetMarketplaceListingQueryKey(listing.id),
       });
+      // When Stripe is configured, the API returns a Checkout URL the
+      // buyer must visit to actually pay; the order stays in
+      // `pending_payment` until the webhook confirms the charge. In
+      // dev/offline mode the embedded order is paid immediately.
+      if (result.requiresPayment && result.checkoutUrl) {
+        toast({
+          title: "Redirecting to checkout",
+          description: `Order #${result.orderId} — complete payment to confirm.`,
+        });
+        setDialogOpen(false);
+        window.location.assign(result.checkoutUrl);
+        return;
+      }
       toast({
         title: "Order placed",
-        description: `Order #${order.id} queued with ${order.supplier.name}`,
+        description: result.order
+          ? `Order #${result.order.id} queued with ${result.order.supplier.name}`
+          : `Order #${result.orderId} queued`,
       });
       setDialogOpen(false);
-      setLocation(`/orders/${order.id}`);
+      setLocation(`/orders/${result.orderId}`);
     } catch (e) {
       toast({
         title: "Couldn't place order",

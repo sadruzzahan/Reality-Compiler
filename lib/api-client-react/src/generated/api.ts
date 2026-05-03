@@ -18,6 +18,8 @@ import type {
 
 import type {
   AccountDeletionSummary,
+  ConnectAccountLink,
+  ConnectStatus,
   ContactAck,
   ContactInput,
   CreateSessionInput,
@@ -34,8 +36,11 @@ import type {
   MarketplaceListingSummary,
   Me,
   Order,
+  OrderRefundInput,
+  OrderRefundResult,
   OrderSummary,
   PlaceOrderInput,
+  PlaceOrderResponse,
   PublishListingInput,
   PurgeSummary,
   Quote,
@@ -1149,8 +1154,8 @@ export const getPlaceOrderUrl = () => {
 export const placeOrder = async (
   placeOrderInput: PlaceOrderInput,
   options?: RequestInit,
-): Promise<Order> => {
-  return customFetch<Order>(getPlaceOrderUrl(), {
+): Promise<PlaceOrderResponse> => {
+  return customFetch<PlaceOrderResponse>(getPlaceOrderUrl(), {
     ...options,
     method: "POST",
     headers: { "Content-Type": "application/json", ...options?.headers },
@@ -1696,6 +1701,266 @@ export function useExportMyData<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Idempotently creates a Stripe Connect Express account for the
+designer (if one doesn't yet exist) and returns a one-shot
+onboarding URL. The frontend should redirect the browser to
+`onboardingUrl`; Stripe will redirect back to `/payouts` on
+completion.
+
+ * @summary Start (or refresh) Stripe Connect Express onboarding
+ */
+export const getCreateConnectAccountUrl = () => {
+  return `/api/me/connect-account`;
+};
+
+export const createConnectAccount = async (
+  options?: RequestInit,
+): Promise<ConnectAccountLink> => {
+  return customFetch<ConnectAccountLink>(getCreateConnectAccountUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getCreateConnectAccountMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createConnectAccount>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createConnectAccount>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["createConnectAccount"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createConnectAccount>>,
+    void
+  > = () => {
+    return createConnectAccount(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateConnectAccountMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createConnectAccount>>
+>;
+
+export type CreateConnectAccountMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Start (or refresh) Stripe Connect Express onboarding
+ */
+export const useCreateConnectAccount = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createConnectAccount>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createConnectAccount>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getCreateConnectAccountMutationOptions(options));
+};
+
+/**
+ * Returns the live `charges_enabled` / `payouts_enabled` /
+`details_submitted` flags from Stripe so the UI can prompt the
+designer to finish onboarding when needed.
+
+ * @summary Inspect current Stripe Connect account status
+ */
+export const getGetConnectStatusUrl = () => {
+  return `/api/me/connect-status`;
+};
+
+export const getConnectStatus = async (
+  options?: RequestInit,
+): Promise<ConnectStatus> => {
+  return customFetch<ConnectStatus>(getGetConnectStatusUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetConnectStatusQueryKey = () => {
+  return [`/api/me/connect-status`] as const;
+};
+
+export const getGetConnectStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getConnectStatus>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getConnectStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetConnectStatusQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getConnectStatus>>
+  > = ({ signal }) => getConnectStatus({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getConnectStatus>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetConnectStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getConnectStatus>>
+>;
+export type GetConnectStatusQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Inspect current Stripe Connect account status
+ */
+
+export function useGetConnectStatus<
+  TData = Awaited<ReturnType<typeof getConnectStatus>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getConnectStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetConnectStatusQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Admin-only. Authenticated via the `x-admin-token` header against
+the server-side `ADMIN_API_TOKEN`. Triggers a Stripe Refund with
+`reverse_transfer` + `refund_application_fee` so the designer's
+Connect transfer and the platform fee are clawed back
+proportionally. The order's `paymentStatus` and `refundedAmount`
+columns are updated by the `charge.refunded` webhook.
+
+ * @summary Refund (full or partial) a paid order
+ */
+export const getRefundOrderUrl = (id: number) => {
+  return `/api/admin/orders/${id}/refund`;
+};
+
+export const refundOrder = async (
+  id: number,
+  orderRefundInput: OrderRefundInput,
+  options?: RequestInit,
+): Promise<OrderRefundResult> => {
+  return customFetch<OrderRefundResult>(getRefundOrderUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(orderRefundInput),
+  });
+};
+
+export const getRefundOrderMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof refundOrder>>,
+    TError,
+    { id: number; data: BodyType<OrderRefundInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof refundOrder>>,
+  TError,
+  { id: number; data: BodyType<OrderRefundInput> },
+  TContext
+> => {
+  const mutationKey = ["refundOrder"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof refundOrder>>,
+    { id: number; data: BodyType<OrderRefundInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return refundOrder(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RefundOrderMutationResult = NonNullable<
+  Awaited<ReturnType<typeof refundOrder>>
+>;
+export type RefundOrderMutationBody = BodyType<OrderRefundInput>;
+export type RefundOrderMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Refund (full or partial) a paid order
+ */
+export const useRefundOrder = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof refundOrder>>,
+    TError,
+    { id: number; data: BodyType<OrderRefundInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof refundOrder>>,
+  TError,
+  { id: number; data: BodyType<OrderRefundInput> },
+  TContext
+> => {
+  return useMutation(getRefundOrderMutationOptions(options));
+};
 
 /**
  * Authenticated via the `x-admin-token` header against the

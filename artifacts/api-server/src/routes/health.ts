@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { sql } from "drizzle-orm";
+import { sql } from "@workspace/db";
 import { db } from "@workspace/db";
 import { HealthCheckResponse } from "@workspace/api-zod";
 import { asyncHandler } from "../middlewares/asyncHandler";

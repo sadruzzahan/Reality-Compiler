@@ -46,6 +46,37 @@ function statusIcon(status: string) {
   }
 }
 
+function paymentLabel(status: string | undefined | null) {
+  switch (status) {
+    case "paid":
+      return "Paid";
+    case "refunded":
+      return "Refunded";
+    case "partially_refunded":
+      return "Partially refunded";
+    case "failed":
+      return "Payment failed";
+    case "pending_payment":
+    default:
+      return "Awaiting payment";
+  }
+}
+
+function paymentBadgeClass(status: string | undefined | null) {
+  switch (status) {
+    case "paid":
+      return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30";
+    case "refunded":
+    case "failed":
+      return "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30";
+    case "partially_refunded":
+      return "bg-orange-500/15 text-orange-700 dark:text-orange-400 border-orange-500/30";
+    case "pending_payment":
+    default:
+      return "bg-muted text-muted-foreground border-border";
+  }
+}
+
 function statusColor(status: string) {
   switch (status) {
     case "queued":
@@ -148,12 +179,21 @@ export default function OrderDetail() {
               <span>{order.supplier.location}, {order.supplier.country}</span>
             </div>
           </div>
-          <Badge
-            className={`font-mono text-xs uppercase px-3 py-1.5 ${statusColor(order.status)}`}
-            data-testid="badge-current-status"
-          >
-            {order.status.replace("_", " ")}
-          </Badge>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge
+              className={`font-mono text-xs uppercase px-3 py-1.5 ${statusColor(order.status)}`}
+              data-testid="badge-current-status"
+            >
+              {order.status.replace("_", " ")}
+            </Badge>
+            <Badge
+              variant="outline"
+              className={`font-mono text-xs uppercase px-3 py-1.5 ${paymentBadgeClass(order.paymentStatus)}`}
+              data-testid="badge-payment-status"
+            >
+              {paymentLabel(order.paymentStatus)}
+            </Badge>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -281,6 +321,19 @@ export default function OrderDetail() {
                     ${order.totalCost.toLocaleString()}
                   </span>
                 </div>
+                {order.refundedAmount > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground font-mono text-xs">
+                      Refunded
+                    </span>
+                    <span
+                      className="font-mono text-red-600 dark:text-red-400"
+                      data-testid="text-refunded-amount"
+                    >
+                      −${order.refundedAmount.toFixed(2)}
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between pt-1">
                   <span className="text-muted-foreground font-mono text-xs flex items-center gap-1">
                     <Clock className="w-3 h-3" /> Lead time

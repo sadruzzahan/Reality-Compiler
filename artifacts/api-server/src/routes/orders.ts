@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, inArray, and, isNull } from "drizzle-orm";
+import { eq, desc, inArray, and, isNull } from "@workspace/db";
 import { clerkClient } from "@clerk/express";
 import {
   db,
@@ -9,6 +9,7 @@ import {
   designSessionsTable,
   designOutputsTable,
   marketplaceListingsTable,
+  userProfilesTable,
   recordAudit,
   type Order,
   type Quote,
@@ -16,6 +17,12 @@ import {
   type OrderStatus,
   type OrderStatusEvent,
 } from "@workspace/db";
+import {
+  isStripeConfigured,
+  createCheckoutSession,
+  ensureCustomer,
+  getAppBaseUrl,
+} from "../lib/stripe";
 import {
   AdvanceOrderParams,
   GetOrderParams,
@@ -117,6 +124,8 @@ async function serializeOrder(order: OrderRow) {
     shippingAddress: order.shippingAddress,
     status: order.status as OrderStatus,
     statusHistory: order.statusHistory,
+    paymentStatus: order.paymentStatus,
+    refundedAmount: Number(order.refundedAmount),
     createdAt: order.createdAt.toISOString(),
     updatedAt: order.updatedAt.toISOString(),
   };
@@ -166,6 +175,7 @@ router.get(
           payoutAmount: Number(r.order.payoutAmount),
           designerUserId: r.order.designerUserId,
           leadTimeDays: r.order.leadTimeDays,
+          paymentStatus: r.order.paymentStatus,
           createdAt: r.order.createdAt.toISOString(),
           updatedAt: r.order.updatedAt.toISOString(),
         };
@@ -294,6 +304,7 @@ router.get(
         quantity: r.order.quantity,
         totalCost: Number(r.order.totalCost),
         payoutAmount: Number(r.order.payoutAmount),
+        paymentStatus: r.order.paymentStatus,
         leadTimeDays: r.order.leadTimeDays,
         createdAt: r.order.createdAt.toISOString(),
         updatedAt: r.order.updatedAt.toISOString(),
@@ -357,9 +368,12 @@ router.post(
     const quantity = body.quantity;
     const unitCost = Number(row.quote.unitCost);
     const setupFee = Number(row.quote.setupFee);
-    const totalCost = Math.round((unitCost * quantity + setupFee) * 100) / 100;
+    // Manufacturing component charged by the supplier (we keep this on the
+    // platform balance to forward to the supplier off-platform).
+    const manufacturingCost =
+      Math.round((unitCost * quantity + setupFee) * 100) / 100;
 
-    let payoutAmount = 0;
+    let designerLicenseTotal = 0;
     let designerUserId: string | null = null;
     if (
       listing &&
@@ -367,15 +381,32 @@ router.post(
       listing.userId !== req.userId
     ) {
       designerUserId = listing.userId;
-      payoutAmount =
+      designerLicenseTotal =
         Math.round(Number(listing.listingPrice) * quantity * 100) / 100;
     }
-    const now = new Date();
-    const initialEvent: OrderStatusEvent = {
-      status: "queued",
-      note: STATUS_NOTES.queued,
-      at: now.toISOString(),
-    };
+    // Reality Compiler's marketplace economics: the buyer pays manufacturing
+    // + the licence price. Of the licence portion, 70% goes to the designer
+    // (Connect transfer) and 30% stays on the platform.
+    const totalCost =
+      Math.round((manufacturingCost + designerLicenseTotal) * 100) / 100;
+    const payoutAmount =
+      Math.round(designerLicenseTotal * 0.7 * 100) / 100;
+
+    const stripeOn = isStripeConfigured();
+    const initialPaymentStatus = stripeOn ? "pending_payment" : "paid";
+    const initialOrderStatus: OrderStatus = "queued";
+    // Only seed the queued status event when the order is already paid
+    // (dev fallback). For Stripe-paid orders, the webhook seeds the event
+    // when payment actually succeeds.
+    const statusHistory: OrderStatusEvent[] = stripeOn
+      ? []
+      : [
+          {
+            status: "queued",
+            note: STATUS_NOTES.queued,
+            at: new Date().toISOString(),
+          },
+        ];
 
     const [created] = await db
       .insert(ordersTable)
@@ -391,13 +422,12 @@ router.post(
         payoutAmount: String(payoutAmount),
         leadTimeDays: row.quote.leadTimeDays,
         shippingAddress: body.shippingAddress,
-        status: "queued",
-        statusHistory: [initialEvent],
+        status: initialOrderStatus,
+        statusHistory,
+        paymentStatus: initialPaymentStatus,
       })
       .returning();
 
-    const full = await loadOrder(created.id);
-    if (!full) throw new ApiError("INTERNAL", "Failed to load created order");
     await recordAudit({
       actorUserId: req.userId!,
       action: "order.create",
@@ -405,13 +435,121 @@ router.post(
       targetId: created.id,
       after: {
         status: created.status,
+        paymentStatus: created.paymentStatus,
         totalCost: created.totalCost,
         designerUserId: created.designerUserId,
         marketplaceListingId: created.marketplaceListingId,
       },
       requestId: req.id ? String(req.id) : null,
     });
-    res.status(201).json(await serializeOrder(full));
+
+    // Stripe disabled (dev fallback): return the fully-realised order so
+    // existing test suites and offline development keep working.
+    if (!stripeOn) {
+      const full = await loadOrder(created.id);
+      if (!full) throw new ApiError("INTERNAL", "Failed to load created order");
+      res.status(201).json({
+        orderId: created.id,
+        checkoutUrl: null,
+        requiresPayment: false,
+        order: await serializeOrder(full),
+      });
+      return;
+    }
+
+    // Stripe Checkout flow. We resolve buyer email + Stripe customer +
+    // designer Connect account, then create a session whose metadata
+    // points back to this order. The webhook flips `payment_status`
+    // to `paid` when the buyer completes checkout.
+    let buyerEmail: string | null = null;
+    try {
+      const u = await clerkClient.users.getUser(req.userId!);
+      buyerEmail =
+        u.primaryEmailAddress?.emailAddress ??
+        u.emailAddresses[0]?.emailAddress ??
+        null;
+    } catch {
+      // non-fatal — Stripe Checkout will collect an email at the form.
+    }
+
+    const [buyerProfile] = await db
+      .select()
+      .from(userProfilesTable)
+      .where(eq(userProfilesTable.userId, req.userId!));
+
+    let buyerStripeCustomerId: string | null =
+      buyerProfile?.stripeCustomerId ?? null;
+    if (!buyerStripeCustomerId && buyerEmail) {
+      buyerStripeCustomerId = await ensureCustomer(
+        req.userId!,
+        buyerEmail,
+        null,
+      );
+      if (buyerStripeCustomerId) {
+        await db
+          .insert(userProfilesTable)
+          .values({
+            userId: req.userId!,
+            stripeCustomerId: buyerStripeCustomerId,
+          })
+          .onConflictDoUpdate({
+            target: userProfilesTable.userId,
+            set: {
+              stripeCustomerId: buyerStripeCustomerId,
+              updatedAt: new Date(),
+            },
+          });
+      }
+    }
+
+    let designerStripeAccountId: string | null = null;
+    if (designerUserId) {
+      const [dp] = await db
+        .select()
+        .from(userProfilesTable)
+        .where(eq(userProfilesTable.userId, designerUserId));
+      if (dp?.stripeAccountId && dp.stripeAccountStatus === "enabled") {
+        designerStripeAccountId = dp.stripeAccountId;
+      }
+      // If the designer hasn't onboarded with Stripe Connect we fall back
+      // to keeping all funds on the platform balance and reconciling out
+      // of band — better than blocking the sale entirely.
+    }
+
+    const origin =
+      (req.headers["origin"] as string | undefined) ?? getAppBaseUrl();
+    const successUrl = `${origin}/orders/${created.id}?paid=1`;
+    const cancelUrl = `${origin}/orders/${created.id}?canceled=1`;
+
+    const productLabel = listing?.title ?? row.session.title;
+
+    const session = await createCheckoutSession({
+      orderId: created.id,
+      userId: req.userId!,
+      totalDollars: totalCost,
+      payoutDollars: payoutAmount,
+      designerStripeAccountId,
+      productLabel,
+      customerEmail: buyerEmail,
+      buyerStripeCustomerId,
+      successUrl,
+      cancelUrl,
+    });
+
+    await db
+      .update(ordersTable)
+      .set({
+        stripeCheckoutSessionId: session.id,
+        updatedAt: new Date(),
+      })
+      .where(eq(ordersTable.id, created.id));
+
+    res.status(201).json({
+      orderId: created.id,
+      checkoutUrl: session.url,
+      requiresPayment: true,
+      order: null,
+    });
   }),
 );
 

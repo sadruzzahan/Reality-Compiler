@@ -370,6 +370,13 @@ export const ListOrdersResponseItem = zod.object({
   payoutAmount: zod.number(),
   designerUserId: zod.string().nullish(),
   leadTimeDays: zod.number(),
+  paymentStatus: zod.enum([
+    "pending_payment",
+    "paid",
+    "failed",
+    "refunded",
+    "partially_refunded",
+  ]),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -501,6 +508,14 @@ export const GetOrderResponse = zod.object({
       at: zod.coerce.date(),
     }),
   ),
+  paymentStatus: zod.enum([
+    "pending_payment",
+    "paid",
+    "failed",
+    "refunded",
+    "partially_refunded",
+  ]),
+  refundedAmount: zod.number(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -529,6 +544,13 @@ export const ListDesignerOrdersResponseItem = zod.object({
   totalCost: zod.number(),
   payoutAmount: zod.number(),
   leadTimeDays: zod.number(),
+  paymentStatus: zod.enum([
+    "pending_payment",
+    "paid",
+    "failed",
+    "refunded",
+    "partially_refunded",
+  ]),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -643,6 +665,14 @@ export const AdvanceOrderResponse = zod.object({
       at: zod.coerce.date(),
     }),
   ),
+  paymentStatus: zod.enum([
+    "pending_payment",
+    "paid",
+    "failed",
+    "refunded",
+    "partially_refunded",
+  ]),
+  refundedAmount: zod.number(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -695,6 +725,80 @@ export const ExportMyDataResponse = zod.object({
   listings: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
   orders: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
   payouts: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
+});
+
+/**
+ * Idempotently creates a Stripe Connect Express account for the
+designer (if one doesn't yet exist) and returns a one-shot
+onboarding URL. The frontend should redirect the browser to
+`onboardingUrl`; Stripe will redirect back to `/payouts` on
+completion.
+
+ * @summary Start (or refresh) Stripe Connect Express onboarding
+ */
+export const CreateConnectAccountResponse = zod.object({
+  accountId: zod.string(),
+  status: zod.enum(["pending", "restricted", "enabled"]),
+  onboardingUrl: zod.string(),
+  expiresAt: zod.coerce.date(),
+});
+
+/**
+ * Returns the live `charges_enabled` / `payouts_enabled` /
+`details_submitted` flags from Stripe so the UI can prompt the
+designer to finish onboarding when needed.
+
+ * @summary Inspect current Stripe Connect account status
+ */
+export const GetConnectStatusResponse = zod.object({
+  configured: zod
+    .boolean()
+    .describe("Whether the server has Stripe credentials."),
+  accountId: zod.string().nullable(),
+  status: zod.union([
+    zod.enum(["pending", "restricted", "enabled"]),
+    zod.null(),
+  ]),
+  chargesEnabled: zod.boolean(),
+  payoutsEnabled: zod.boolean(),
+  detailsSubmitted: zod.boolean(),
+});
+
+/**
+ * Admin-only. Authenticated via the `x-admin-token` header against
+the server-side `ADMIN_API_TOKEN`. Triggers a Stripe Refund with
+`reverse_transfer` + `refund_application_fee` so the designer's
+Connect transfer and the platform fee are clawed back
+proportionally. The order's `paymentStatus` and `refundedAmount`
+columns are updated by the `charge.refunded` webhook.
+
+ * @summary Refund (full or partial) a paid order
+ */
+export const RefundOrderParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const RefundOrderHeader = zod.object({
+  "x-admin-token": zod.string(),
+});
+
+export const RefundOrderBody = zod.object({
+  amount: zod
+    .number()
+    .nullish()
+    .describe(
+      "Dollar amount to refund. Omit (or null) for a full refund of\nthe remaining balance.\n",
+    ),
+  reason: zod
+    .enum(["duplicate", "fraudulent", "requested_by_customer"])
+    .optional(),
+});
+
+export const RefundOrderResponse = zod.object({
+  orderId: zod.number(),
+  refundId: zod.string(),
+  amount: zod.number(),
+  status: zod.string().nullish(),
 });
 
 /**

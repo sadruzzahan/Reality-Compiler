@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, asc, and, notInArray, sql, isNull } from "drizzle-orm";
+import { eq, desc, asc, and, notInArray, sql, isNull } from "@workspace/db";
 import {
   db,
   designSessionsTable,

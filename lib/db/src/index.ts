@@ -15,3 +15,27 @@ export const db = drizzle(pool, { schema });
 
 export * from "./schema";
 export * from "./audit";
+// Re-export the drizzle-orm SQL helpers so consumers always pick up
+// the exact version that @workspace/db is compiled against — pnpm can
+// otherwise hoist a second copy (e.g. when a sibling pulls in
+// `@opentelemetry/api`) and TypeScript treats the two as incompatible.
+export {
+  eq,
+  and,
+  or,
+  not,
+  desc,
+  asc,
+  inArray,
+  notInArray,
+  isNull,
+  isNotNull,
+  sql,
+  lt,
+  lte,
+  gt,
+  gte,
+  ne,
+  like,
+  ilike,
+} from "drizzle-orm";

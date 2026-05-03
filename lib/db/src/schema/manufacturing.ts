@@ -132,6 +132,17 @@ export const ordersTable = pgTable(
       .$type<OrderStatusEvent[]>()
       .notNull()
       .default([]),
+    // Stripe Checkout / Payment lifecycle. `paymentStatus` is the source of
+    // truth for whether the buyer has paid; `status` (queued/in_production/...)
+    // only advances after payment_status === 'paid'. `refundedAmount` is in
+    // dollars and is incremented by the charge.refunded webhook.
+    stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+    stripePaymentIntentId: text("stripe_payment_intent_id"),
+    stripeChargeId: text("stripe_charge_id"),
+    paymentStatus: text("payment_status").notNull().default("pending_payment"),
+    refundedAmount: numeric("refunded_amount", { precision: 12, scale: 2 })
+      .notNull()
+      .default("0"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -149,10 +160,22 @@ export const ordersTable = pgTable(
     index("orders_supplier_id_idx").on(t.supplierId),
     index("orders_quote_id_idx").on(t.quoteId),
     index("orders_status_idx").on(t.status),
+    index("orders_payment_status_idx").on(t.paymentStatus),
+    index("orders_stripe_checkout_session_id_idx").on(
+      t.stripeCheckoutSessionId,
+    ),
+    index("orders_stripe_payment_intent_id_idx").on(t.stripePaymentIntentId),
     index("orders_deleted_at_idx").on(t.deletedAt),
     index("orders_created_at_idx").on(t.createdAt),
   ],
 );
+
+export type PaymentStatus =
+  | "pending_payment"
+  | "paid"
+  | "failed"
+  | "refunded"
+  | "partially_refunded";
 
 export type Supplier = typeof suppliersTable.$inferSelect;
 export type Quote = typeof quotesTable.$inferSelect;

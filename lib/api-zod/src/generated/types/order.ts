@@ -7,6 +7,7 @@
  */
 import type { OrderStatus } from "./orderStatus";
 import type { OrderStatusEvent } from "./orderStatusEvent";
+import type { PaymentStatus } from "./paymentStatus";
 import type { Quote } from "./quote";
 import type { ShippingAddress } from "./shippingAddress";
 import type { Supplier } from "./supplier";
@@ -28,6 +29,8 @@ export interface Order {
   shippingAddress: ShippingAddress;
   status: OrderStatus;
   statusHistory: OrderStatusEvent[];
+  paymentStatus: PaymentStatus;
+  refundedAmount: number;
   createdAt: Date;
   updatedAt: Date;
 }

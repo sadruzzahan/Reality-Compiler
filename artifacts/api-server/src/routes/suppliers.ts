@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc } from "@workspace/db";
 import { db, suppliersTable, type Supplier } from "@workspace/db";
 import {
   GetSupplierParams,

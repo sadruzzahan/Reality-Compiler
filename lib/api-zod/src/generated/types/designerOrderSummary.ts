@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DesignerOrderSummaryStatus } from "./designerOrderSummaryStatus";
+import type { PaymentStatus } from "./paymentStatus";
 
 export interface DesignerOrderSummary {
   id: number;
@@ -24,6 +25,7 @@ export interface DesignerOrderSummary {
   totalCost: number;
   payoutAmount: number;
   leadTimeDays: number;
+  paymentStatus: PaymentStatus;
   createdAt: Date;
   updatedAt: Date;
 }
