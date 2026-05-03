@@ -7,7 +7,7 @@ Full-stack monorepo. Users describe a physical product in plain English; AI gene
 - `artifacts/reality-compiler` — React + Vite frontend at `/`. Uses generated React Query hooks from `@workspace/api-client-react`.
 - `artifacts/api-server` — Express 5 API at `/api`. Routes in `src/routes/sessions.ts`, AI pipeline in `src/lib/designPipeline.ts`, seed in `src/lib/seed.ts`.
 - `lib/api-spec/openapi.yaml` — single source of truth. Run `pnpm --filter @workspace/api-spec run codegen` after edits.
-- `lib/db/src/schema/designSessions.ts` — Drizzle tables: `design_sessions`, `design_messages`, `design_outputs`. Push with `pnpm --filter @workspace/db run push`.
+- `lib/db/src/schema/` — Drizzle tables: `design_sessions`, `design_messages`, `design_outputs`, `marketplace_listings`, `orders`, `quotes`, `suppliers`, `user_profiles`, `audit_log`. Soft-delete via `deleted_at` on sessions/listings/orders. Schema changes go through migrations: `pnpm --filter @workspace/db run generate` then `pnpm --filter @workspace/db run migrate`. `push` is dev-only. See `docs/db-runbook.md`.
 - `lib/integrations-openai-ai-server` — slim OpenAI client (chat completions + image generation) via Replit AI Integrations proxy.
 
 ## AI pipeline

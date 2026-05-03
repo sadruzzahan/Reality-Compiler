@@ -12,7 +12,8 @@ export async function seedIfEmpty(): Promise<void> {
   try {
     const [{ c }] = await db
       .select({ c: sql<number>`count(*)::int` })
-      .from(designSessionsTable);
+      .from(designSessionsTable)
+      .where(sql`${designSessionsTable.deletedAt} IS NULL`);
     if (c > 0) return;
 
     const seeds = [

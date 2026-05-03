@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, asc, and, notInArray, sql } from "drizzle-orm";
+import { eq, desc, asc, and, notInArray, sql, isNull } from "drizzle-orm";
 import {
   db,
   designSessionsTable,
@@ -26,7 +26,12 @@ async function userMayAccessSession(
   const [s] = await db
     .select({ userId: designSessionsTable.userId })
     .from(designSessionsTable)
-    .where(eq(designSessionsTable.id, sessionId));
+    .where(
+      and(
+        eq(designSessionsTable.id, sessionId),
+        isNull(designSessionsTable.deletedAt),
+      ),
+    );
   if (!s) return false;
   return s.userId === userId;
 }
@@ -88,7 +93,12 @@ router.post(
     const [session] = await db
       .select()
       .from(designSessionsTable)
-      .where(eq(designSessionsTable.id, params.id));
+      .where(
+        and(
+          eq(designSessionsTable.id, params.id),
+          isNull(designSessionsTable.deletedAt),
+        ),
+      );
     if (!session) throw notFound("Session");
     if (session.status !== "ready") {
       throw badRequest(

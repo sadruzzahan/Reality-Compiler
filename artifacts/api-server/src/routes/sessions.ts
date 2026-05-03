@@ -1,10 +1,11 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, sql, and } from "drizzle-orm";
+import { eq, desc, sql, and, isNull } from "drizzle-orm";
 import {
   db,
   designSessionsTable,
   designMessagesTable,
   designOutputsTable,
+  recordAudit,
 } from "@workspace/db";
 import {
   CreateSessionBody,
@@ -33,7 +34,12 @@ async function userCanReadSession(
   const [s] = await db
     .select({ userId: designSessionsTable.userId })
     .from(designSessionsTable)
-    .where(eq(designSessionsTable.id, sessionId));
+    .where(
+      and(
+        eq(designSessionsTable.id, sessionId),
+        isNull(designSessionsTable.deletedAt),
+      ),
+    );
   if (!s) return false;
   return s.userId === userId;
 }
@@ -85,7 +91,12 @@ async function buildSessionResponse(sessionId: number) {
   const [session] = await db
     .select()
     .from(designSessionsTable)
-    .where(eq(designSessionsTable.id, sessionId));
+    .where(
+      and(
+        eq(designSessionsTable.id, sessionId),
+        isNull(designSessionsTable.deletedAt),
+      ),
+    );
   if (!session) return null;
 
   const messages = await db
@@ -117,7 +128,12 @@ async function buildSummaries(userId?: string) {
       updatedAt: designSessionsTable.updatedAt,
     })
     .from(designSessionsTable)
-    .where(userId ? eq(designSessionsTable.userId, userId) : sql`true`)
+    .where(
+      and(
+        isNull(designSessionsTable.deletedAt),
+        userId ? eq(designSessionsTable.userId, userId) : sql`true`,
+      ),
+    )
     .orderBy(desc(designSessionsTable.updatedAt));
 
   const summaries = await Promise.all(
@@ -211,7 +227,17 @@ router.get(
   attachUserId,
   asyncHandler(async (req, res) => {
     const summaries = req.userId ? await buildSummaries(req.userId) : [];
-    const outputs = await db.select().from(designOutputsTable);
+    // Exclude outputs whose parent session is soft-deleted so stats stay
+    // consistent with the (filtered) sessions list.
+    const outputRows = await db
+      .select({ output: designOutputsTable })
+      .from(designOutputsTable)
+      .innerJoin(
+        designSessionsTable,
+        eq(designSessionsTable.id, designOutputsTable.sessionId),
+      )
+      .where(isNull(designSessionsTable.deletedAt));
+    const outputs = outputRows.map((r) => r.output);
 
     const materialCounts = new Map<string, number>();
     const categoryCounts = new Map<string, number>();
@@ -243,7 +269,8 @@ router.get(
 
     const [{ totalCount }] = await db
       .select({ totalCount: sql<number>`count(*)::int` })
-      .from(designSessionsTable);
+      .from(designSessionsTable)
+      .where(isNull(designSessionsTable.deletedAt));
     res.json({
       totalSessions: totalCount ?? 0,
       totalDesigns,
@@ -311,14 +338,29 @@ router.delete(
   requireAuth,
   asyncHandler(async (req, res) => {
     const params = parseOrThrow(DeleteSessionParams, req.params);
-    await db
-      .delete(designSessionsTable)
+    // Soft-delete: keep the row for audit/recovery and detach it from any
+    // marketplace surfaces by stamping `deleted_at`.
+    const [deleted] = await db
+      .update(designSessionsTable)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
       .where(
         and(
           eq(designSessionsTable.id, params.id),
           eq(designSessionsTable.userId, req.userId!),
+          isNull(designSessionsTable.deletedAt),
         ),
-      );
+      )
+      .returning();
+    if (deleted) {
+      await recordAudit({
+        actorUserId: req.userId!,
+        action: "session.delete",
+        targetType: "design_session",
+        targetId: deleted.id,
+        before: { status: deleted.status, title: deleted.title },
+        requestId: req.id ? String(req.id) : null,
+      });
+    }
     res.sendStatus(204);
   }),
 );
@@ -354,7 +396,12 @@ router.post(
     const [session] = await db
       .select()
       .from(designSessionsTable)
-      .where(eq(designSessionsTable.id, params.id));
+      .where(
+        and(
+          eq(designSessionsTable.id, params.id),
+          isNull(designSessionsTable.deletedAt),
+        ),
+      );
     if (!session) throw notFound("Session");
     if (session.userId !== req.userId) throw forbidden("Not session owner");
 

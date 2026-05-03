@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, and, asc, sql, inArray } from "drizzle-orm";
+import { eq, desc, and, asc, sql, inArray, isNull } from "drizzle-orm";
 import { clerkClient } from "@clerk/express";
 import {
   db,
@@ -10,6 +10,7 @@ import {
   quotesTable,
   suppliersTable,
   userProfilesTable,
+  recordAudit,
   type MarketplaceListing,
   type UserProfile,
   type Quote,
@@ -122,7 +123,10 @@ router.get(
     const params = parseOrThrow(ListMarketplaceListingsQueryParams, req.query);
     const { category, sort } = params;
 
-    const conds = [eq(marketplaceListingsTable.status, "active")];
+    const conds = [
+      eq(marketplaceListingsTable.status, "active"),
+      isNull(marketplaceListingsTable.deletedAt),
+    ];
     if (category) conds.push(eq(marketplaceListingsTable.category, category));
 
     const rows = await db
@@ -235,7 +239,12 @@ router.get(
     const [listing] = await db
       .select()
       .from(marketplaceListingsTable)
-      .where(eq(marketplaceListingsTable.id, params.id));
+      .where(
+        and(
+          eq(marketplaceListingsTable.id, params.id),
+          isNull(marketplaceListingsTable.deletedAt),
+        ),
+      );
     if (!listing) throw notFound("Listing");
     const [output] = await db
       .select()
@@ -279,7 +288,12 @@ router.post(
     const [session] = await db
       .select()
       .from(designSessionsTable)
-      .where(eq(designSessionsTable.id, sessionId));
+      .where(
+        and(
+          eq(designSessionsTable.id, sessionId),
+          isNull(designSessionsTable.deletedAt),
+        ),
+      );
     if (!session) throw notFound("Session");
     if (session.userId !== userId) throw forbidden("Not session owner");
     if (session.status !== "ready") {
@@ -294,6 +308,7 @@ router.post(
       .where(eq(marketplaceListingsTable.sessionId, sessionId));
 
     let listing: MarketplaceListing;
+    let auditAction: "listing.publish" | "listing.update";
     if (existing) {
       const [updated] = await db
         .update(marketplaceListingsTable)
@@ -304,11 +319,17 @@ router.post(
           listingPrice: String(listingPrice),
           status: "active",
           creatorHandle: handle,
+          // Re-publish: clear any previous soft-delete tombstone.
+          deletedAt: null,
           updatedAt: new Date(),
         })
         .where(eq(marketplaceListingsTable.id, existing.id))
         .returning();
       listing = updated!;
+      auditAction =
+        existing.status === "active" && existing.deletedAt == null
+          ? "listing.update"
+          : "listing.publish";
     } else {
       const [created] = await db
         .insert(marketplaceListingsTable)
@@ -324,7 +345,28 @@ router.post(
         })
         .returning();
       listing = created!;
+      auditAction = "listing.publish";
     }
+    await recordAudit({
+      actorUserId: userId,
+      action: auditAction,
+      targetType: "marketplace_listing",
+      targetId: listing.id,
+      before: existing
+        ? {
+            status: existing.status,
+            title: existing.title,
+            listingPrice: existing.listingPrice,
+            deletedAt: existing.deletedAt,
+          }
+        : null,
+      after: {
+        status: listing.status,
+        title: listing.title,
+        listingPrice: listing.listingPrice,
+      },
+      requestId: req.id ? String(req.id) : null,
+    });
 
     const [output] = await db
       .select()
@@ -365,12 +407,32 @@ router.delete(
     const [listing] = await db
       .select()
       .from(marketplaceListingsTable)
-      .where(eq(marketplaceListingsTable.id, params.id));
+      .where(
+        and(
+          eq(marketplaceListingsTable.id, params.id),
+          isNull(marketplaceListingsTable.deletedAt),
+        ),
+      );
     if (!listing) throw notFound("Listing");
     if (listing.userId !== req.userId) throw forbidden("Not owner");
+    // Soft-delete: keep the row so existing orders that reference it remain
+    // resolvable (designer order list shows `listingDeleted: true`).
     await db
-      .delete(marketplaceListingsTable)
+      .update(marketplaceListingsTable)
+      .set({
+        deletedAt: new Date(),
+        status: "removed",
+        updatedAt: new Date(),
+      })
       .where(eq(marketplaceListingsTable.id, listing.id));
+    await recordAudit({
+      actorUserId: req.userId!,
+      action: "listing.unpublish",
+      targetType: "marketplace_listing",
+      targetId: listing.id,
+      before: { status: listing.status, title: listing.title },
+      requestId: req.id ? String(req.id) : null,
+    });
     res.sendStatus(204);
   }),
 );
@@ -387,6 +449,7 @@ router.get(
         and(
           eq(marketplaceListingsTable.userId, targetUserId),
           eq(marketplaceListingsTable.status, "active"),
+          isNull(marketplaceListingsTable.deletedAt),
         ),
       )
       .orderBy(desc(marketplaceListingsTable.createdAt));

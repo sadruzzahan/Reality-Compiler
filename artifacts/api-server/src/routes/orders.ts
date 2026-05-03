@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, inArray } from "drizzle-orm";
+import { eq, desc, inArray, and, isNull } from "drizzle-orm";
 import { clerkClient } from "@clerk/express";
 import {
   db,
@@ -9,6 +9,7 @@ import {
   designSessionsTable,
   designOutputsTable,
   marketplaceListingsTable,
+  recordAudit,
   type Order,
   type Quote,
   type Supplier,
@@ -58,7 +59,7 @@ async function loadOrder(id: number): Promise<OrderRow | null> {
     .from(ordersTable)
     .innerJoin(quotesTable, eq(quotesTable.id, ordersTable.quoteId))
     .innerJoin(suppliersTable, eq(suppliersTable.id, ordersTable.supplierId))
-    .where(eq(ordersTable.id, id));
+    .where(and(eq(ordersTable.id, id), isNull(ordersTable.deletedAt)));
   if (!row) return null;
   return { ...row.order, quote: row.quote, supplier: row.supplier };
 }
@@ -135,7 +136,12 @@ router.get(
         designSessionsTable,
         eq(designSessionsTable.id, ordersTable.sessionId),
       )
-      .where(eq(ordersTable.userId, req.userId!))
+      .where(
+        and(
+          eq(ordersTable.userId, req.userId!),
+          isNull(ordersTable.deletedAt),
+        ),
+      )
       .orderBy(desc(ordersTable.createdAt));
 
     const summaries = await Promise.all(
@@ -188,7 +194,12 @@ router.get(
         designSessionsTable,
         eq(designSessionsTable.id, ordersTable.sessionId),
       )
-      .where(eq(ordersTable.designerUserId, userId))
+      .where(
+        and(
+          eq(ordersTable.designerUserId, userId),
+          isNull(ordersTable.deletedAt),
+        ),
+      )
       .orderBy(desc(ordersTable.createdAt));
 
     if (rows.length === 0) {
@@ -313,7 +324,12 @@ router.post(
       const [found] = await db
         .select()
         .from(marketplaceListingsTable)
-        .where(eq(marketplaceListingsTable.id, body.marketplaceListingId));
+        .where(
+          and(
+            eq(marketplaceListingsTable.id, body.marketplaceListingId),
+            isNull(marketplaceListingsTable.deletedAt),
+          ),
+        );
       if (
         !found ||
         found.sessionId !== row.quote.sessionId ||
@@ -371,6 +387,19 @@ router.post(
 
     const full = await loadOrder(created.id);
     if (!full) throw new ApiError("INTERNAL", "Failed to load created order");
+    await recordAudit({
+      actorUserId: req.userId!,
+      action: "order.create",
+      targetType: "order",
+      targetId: created.id,
+      after: {
+        status: created.status,
+        totalCost: created.totalCost,
+        designerUserId: created.designerUserId,
+        marketplaceListingId: created.marketplaceListingId,
+      },
+      requestId: req.id ? String(req.id) : null,
+    });
     res.status(201).json(await serializeOrder(full));
   }),
 );
@@ -415,6 +444,15 @@ router.post(
 
     const updated = await loadOrder(order.id);
     if (!updated) throw notFound("Order");
+    await recordAudit({
+      actorUserId: req.userId!,
+      action: "order.advance",
+      targetType: "order",
+      targetId: order.id,
+      before: { status: order.status },
+      after: { status: next },
+      requestId: req.id ? String(req.id) : null,
+    });
     res.json(await serializeOrder(updated));
   }),
 );
