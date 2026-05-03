@@ -91,6 +91,7 @@ app.use(corsMiddleware());
 // by `cors`, before any route work).
 app.use(globalLimiter);
 
+app.use("/api/me/avatar", express.json({ limit: "8mb" }));
 app.use(express.json({ limit: "256kb" }));
 app.use(express.urlencoded({ extended: true, limit: "256kb" }));
 

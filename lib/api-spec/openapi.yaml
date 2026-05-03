@@ -26,6 +26,8 @@ tags:
     description: Design IP marketplace listings and designer profiles
   - name: me
     description: Current authenticated user
+  - name: storage
+    description: Hosted object storage (images, avatars)
 paths:
   /healthz:
     get:
@@ -412,6 +414,78 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /me/avatar:
+    post:
+      operationId: uploadAvatar
+      tags: [me]
+      summary: Upload a new profile avatar image
+      description: |
+        Accepts a base64-encoded image (PNG, JPEG, or WebP, max 4 MB) and
+        stores it in object storage. Returns the updated user profile with
+        a hosted `avatarUrl`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadAvatarInput"
+      responses:
+        "200":
+          description: Updated user profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Payload too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /storage/objects/{key}:
+    get:
+      operationId: getStorageObject
+      tags: [storage]
+      summary: Stream a stored object (e.g. generated concept image, avatar)
+      description: |
+        Serves objects uploaded to App Storage with `Cache-Control:
+        public, max-age=31536000, immutable`. Object keys are scoped per
+        user (e.g. `sessions/<userId>/<sessionId>/<uuid>.png`,
+        `avatars/<userId>/<uuid>.png`).
+      parameters:
+        - in: path
+          name: key
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Object bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /me/profile:
     patch:
       operationId: updateMyProfile
@@ -711,6 +785,7 @@ components:
         costEstimate:
           $ref: "#/components/schemas/CostEstimate"
         imageUrl:
+          description: URL to a hosted image (object storage URL or null)
           type: ["string", "null"]
         manufacturingNotes:
           type: string
@@ -749,6 +824,7 @@ components:
         primaryMaterial:
           type: ["string", "null"]
         thumbnailUrl:
+          description: URL to a hosted image (object storage URL or null)
           type: ["string", "null"]
         estimatedCostLow:
           type: ["number", "null"]
@@ -1075,8 +1151,26 @@ components:
           type: ["string", "null"]
           maxLength: 500
         avatarUrl:
+          description: |
+            URL to a hosted image (typically returned by `POST /me/avatar`).
+            Set to `null` to clear the avatar.
           type: ["string", "null"]
           maxLength: 1024
+
+    UploadAvatarInput:
+      type: object
+      properties:
+        contentType:
+          type: string
+          enum: [image/png, image/jpeg, image/webp]
+        dataBase64:
+          type: string
+          description: Base64-encoded image bytes (no `data:` prefix). Max 4 MB decoded.
+          minLength: 1
+          maxLength: 7000000
+      required:
+        - contentType
+        - dataBase64
 
     PublishListingInput:
       type: object

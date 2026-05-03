@@ -6,6 +6,7 @@ import quotesRouter from "./quotes";
 import ordersRouter from "./orders";
 import marketplaceRouter from "./marketplace";
 import meRouter from "./me";
+import storageRouter from "./storage";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(quotesRouter);
 router.use(ordersRouter);
 router.use(marketplaceRouter);
 router.use(meRouter);
+router.use(storageRouter);
 
 export default router;

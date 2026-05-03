@@ -39,6 +39,7 @@ import type {
   SessionStats,
   Supplier,
   UpdateMyProfileInput,
+  UploadAvatarInput,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -1519,6 +1520,188 @@ export function useGetMe<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetMeQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Accepts a base64-encoded image (PNG, JPEG, or WebP, max 4 MB) and
+stores it in object storage. Returns the updated user profile with
+a hosted `avatarUrl`.
+
+ * @summary Upload a new profile avatar image
+ */
+export const getUploadAvatarUrl = () => {
+  return `/api/me/avatar`;
+};
+
+export const uploadAvatar = async (
+  uploadAvatarInput: UploadAvatarInput,
+  options?: RequestInit,
+): Promise<Me> => {
+  return customFetch<Me>(getUploadAvatarUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(uploadAvatarInput),
+  });
+};
+
+export const getUploadAvatarMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof uploadAvatar>>,
+    TError,
+    { data: BodyType<UploadAvatarInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof uploadAvatar>>,
+  TError,
+  { data: BodyType<UploadAvatarInput> },
+  TContext
+> => {
+  const mutationKey = ["uploadAvatar"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof uploadAvatar>>,
+    { data: BodyType<UploadAvatarInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return uploadAvatar(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UploadAvatarMutationResult = NonNullable<
+  Awaited<ReturnType<typeof uploadAvatar>>
+>;
+export type UploadAvatarMutationBody = BodyType<UploadAvatarInput>;
+export type UploadAvatarMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Upload a new profile avatar image
+ */
+export const useUploadAvatar = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof uploadAvatar>>,
+    TError,
+    { data: BodyType<UploadAvatarInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof uploadAvatar>>,
+  TError,
+  { data: BodyType<UploadAvatarInput> },
+  TContext
+> => {
+  return useMutation(getUploadAvatarMutationOptions(options));
+};
+
+/**
+ * Serves objects uploaded to App Storage with `Cache-Control:
+public, max-age=31536000, immutable`. Object keys are scoped per
+user (e.g. `sessions/<userId>/<sessionId>/<uuid>.png`,
+`avatars/<userId>/<uuid>.png`).
+
+ * @summary Stream a stored object (e.g. generated concept image, avatar)
+ */
+export const getGetStorageObjectUrl = (key: string) => {
+  return `/api/storage/objects/${key}`;
+};
+
+export const getStorageObject = async (
+  key: string,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getGetStorageObjectUrl(key), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetStorageObjectQueryKey = (key: string) => {
+  return [`/api/storage/objects/${key}`] as const;
+};
+
+export const getGetStorageObjectQueryOptions = <
+  TData = Awaited<ReturnType<typeof getStorageObject>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  key: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getStorageObject>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetStorageObjectQueryKey(key);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getStorageObject>>
+  > = ({ signal }) => getStorageObject(key, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!key,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getStorageObject>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetStorageObjectQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getStorageObject>>
+>;
+export type GetStorageObjectQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Stream a stored object (e.g. generated concept image, avatar)
+ */
+
+export function useGetStorageObject<
+  TData = Awaited<ReturnType<typeof getStorageObject>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  key: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getStorageObject>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetStorageObjectQueryOptions(key, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

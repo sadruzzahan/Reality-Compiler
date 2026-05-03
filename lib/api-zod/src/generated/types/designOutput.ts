@@ -22,7 +22,10 @@ export interface DesignOutput {
   processes: string[];
   bom: BomItem[];
   costEstimate: CostEstimate;
-  /** @nullable */
+  /**
+   * URL to a hosted image (object storage URL or null)
+   * @nullable
+   */
   imageUrl?: string | null;
   manufacturingNotes: string;
   createdAt: Date;

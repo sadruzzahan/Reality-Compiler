@@ -1,6 +1,8 @@
 import { openai, generateImageBuffer } from "@workspace/integrations-openai-ai-server";
+import { randomUUID } from "crypto";
 import { z } from "zod";
 import { logger } from "./logger";
+import { putImage } from "./objectStorage";
 
 const MODEL = "gpt-5.4";
 
@@ -107,18 +109,21 @@ export async function generateDesignSpec(
   return parsed;
 }
 
-export async function generateConceptImageDataUrl(
+export async function generateAndStoreConceptImage(
   imagePrompt: string,
+  userId: string,
+  sessionId: number,
 ): Promise<string | null> {
   try {
     const buffer = await generateImageBuffer(
       `${imagePrompt}. Clean studio product photo, soft neutral background, sharp focus, professional industrial design render.`,
       "1024x1024",
     );
-    const base64 = buffer.toString("base64");
-    return `data:image/png;base64,${base64}`;
+    const safeUser = encodeURIComponent(userId);
+    const key = `sessions/${safeUser}/${sessionId}/${randomUUID()}.png`;
+    return await putImage(key, buffer, "image/png");
   } catch (err) {
-    logger.error({ err }, "Image generation failed");
+    logger.error({ err, sessionId }, "Image generation failed");
     return null;
   }
 }

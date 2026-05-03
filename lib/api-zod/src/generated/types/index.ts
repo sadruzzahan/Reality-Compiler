@@ -46,3 +46,5 @@ export * from "./shippingAddress";
 export * from "./supplier";
 export * from "./supplierCapacityLevel";
 export * from "./updateMyProfileInput";
+export * from "./uploadAvatarInput";
+export * from "./uploadAvatarInputContentType";

@@ -18,6 +18,9 @@ export interface UpdateMyProfileInput {
    */
   bio?: string | null;
   /**
+   * URL to a hosted image (typically returned by `POST /me/avatar`).
+Set to `null` to clear the avatar.
+
    * @maxLength 1024
    * @nullable
    */

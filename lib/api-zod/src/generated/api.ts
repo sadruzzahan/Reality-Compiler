@@ -25,7 +25,10 @@ export const ListSessionsResponseItem = zod.object({
   productName: zod.string().nullish(),
   category: zod.string().nullish(),
   primaryMaterial: zod.string().nullish(),
-  thumbnailUrl: zod.string().nullish(),
+  thumbnailUrl: zod
+    .string()
+    .nullish()
+    .describe("URL to a hosted image (object storage URL or null)"),
   estimatedCostLow: zod.number().nullish(),
   estimatedCostHigh: zod.number().nullish(),
   messageCount: zod.number(),
@@ -72,7 +75,10 @@ export const GetSessionStatsResponse = zod.object({
       productName: zod.string().nullish(),
       category: zod.string().nullish(),
       primaryMaterial: zod.string().nullish(),
-      thumbnailUrl: zod.string().nullish(),
+      thumbnailUrl: zod
+        .string()
+        .nullish()
+        .describe("URL to a hosted image (object storage URL or null)"),
       estimatedCostLow: zod.number().nullish(),
       estimatedCostHigh: zod.number().nullish(),
       messageCount: zod.number(),
@@ -132,7 +138,10 @@ export const GetSessionResponse = zod.object({
         currency: zod.string(),
         leadTimeDays: zod.number(),
       }),
-      imageUrl: zod.string().nullish(),
+      imageUrl: zod
+        .string()
+        .nullish()
+        .describe("URL to a hosted image (object storage URL or null)"),
       manufacturingNotes: zod.string(),
       createdAt: zod.coerce.date(),
     }),
@@ -217,7 +226,10 @@ export const SendMessageResponse = zod.object({
         currency: zod.string(),
         leadTimeDays: zod.number(),
       }),
-      imageUrl: zod.string().nullish(),
+      imageUrl: zod
+        .string()
+        .nullish()
+        .describe("URL to a hosted image (object storage URL or null)"),
       manufacturingNotes: zod.string(),
       createdAt: zod.coerce.date(),
     }),
@@ -651,6 +663,50 @@ export const GetMeResponse = zod.object({
 });
 
 /**
+ * Accepts a base64-encoded image (PNG, JPEG, or WebP, max 4 MB) and
+stores it in object storage. Returns the updated user profile with
+a hosted `avatarUrl`.
+
+ * @summary Upload a new profile avatar image
+ */
+export const uploadAvatarBodyDataBase64Max = 7000000;
+
+export const UploadAvatarBody = zod.object({
+  contentType: zod.enum(["image/png", "image/jpeg", "image/webp"]),
+  dataBase64: zod
+    .string()
+    .min(1)
+    .max(uploadAvatarBodyDataBase64Max)
+    .describe(
+      "Base64-encoded image bytes (no `data:` prefix). Max 4 MB decoded.",
+    ),
+});
+
+export const UploadAvatarResponse = zod.object({
+  userId: zod.string(),
+  handle: zod.string(),
+  email: zod.string().nullish(),
+  firstName: zod.string().nullish(),
+  lastName: zod.string().nullish(),
+  imageUrl: zod.string().nullish(),
+  displayName: zod.string().nullish(),
+  bio: zod.string().nullish(),
+  avatarUrl: zod.string().nullish(),
+});
+
+/**
+ * Serves objects uploaded to App Storage with `Cache-Control:
+public, max-age=31536000, immutable`. Object keys are scoped per
+user (e.g. `sessions/<userId>/<sessionId>/<uuid>.png`,
+`avatars/<userId>/<uuid>.png`).
+
+ * @summary Stream a stored object (e.g. generated concept image, avatar)
+ */
+export const GetStorageObjectParams = zod.object({
+  key: zod.coerce.string(),
+});
+
+/**
  * @summary Update the authenticated user's public designer profile
  */
 export const updateMyProfileBodyDisplayNameMax = 80;
@@ -662,7 +718,13 @@ export const updateMyProfileBodyAvatarUrlMax = 1024;
 export const UpdateMyProfileBody = zod.object({
   displayName: zod.string().max(updateMyProfileBodyDisplayNameMax).nullish(),
   bio: zod.string().max(updateMyProfileBodyBioMax).nullish(),
-  avatarUrl: zod.string().max(updateMyProfileBodyAvatarUrlMax).nullish(),
+  avatarUrl: zod
+    .string()
+    .max(updateMyProfileBodyAvatarUrlMax)
+    .nullish()
+    .describe(
+      "URL to a hosted image (typically returned by `POST \/me\/avatar`).\nSet to `null` to clear the avatar.\n",
+    ),
 });
 
 export const UpdateMyProfileResponse = zod.object({
@@ -761,7 +823,10 @@ export const GetMarketplaceListingResponse = zod.object({
       currency: zod.string(),
       leadTimeDays: zod.number(),
     }),
-    imageUrl: zod.string().nullish(),
+    imageUrl: zod
+      .string()
+      .nullish()
+      .describe("URL to a hosted image (object storage URL or null)"),
     manufacturingNotes: zod.string(),
     createdAt: zod.coerce.date(),
   }),

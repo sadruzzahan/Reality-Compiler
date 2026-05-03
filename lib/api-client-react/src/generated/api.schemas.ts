@@ -68,7 +68,10 @@ export interface DesignOutput {
   processes: string[];
   bom: BomItem[];
   costEstimate: CostEstimate;
-  /** @nullable */
+  /**
+   * URL to a hosted image (object storage URL or null)
+   * @nullable
+   */
   imageUrl?: string | null;
   manufacturingNotes: string;
   createdAt: string;
@@ -93,7 +96,10 @@ export interface DesignSessionSummary {
   category?: string | null;
   /** @nullable */
   primaryMaterial?: string | null;
-  /** @nullable */
+  /**
+   * URL to a hosted image (object storage URL or null)
+   * @nullable
+   */
   thumbnailUrl?: string | null;
   /** @nullable */
   estimatedCostLow?: number | null;
@@ -252,10 +258,32 @@ export interface UpdateMyProfileInput {
    */
   bio?: string | null;
   /**
+   * URL to a hosted image (typically returned by `POST /me/avatar`).
+Set to `null` to clear the avatar.
+
    * @maxLength 1024
    * @nullable
    */
   avatarUrl?: string | null;
+}
+
+export type UploadAvatarInputContentType =
+  (typeof UploadAvatarInputContentType)[keyof typeof UploadAvatarInputContentType];
+
+export const UploadAvatarInputContentType = {
+  "image/png": "image/png",
+  "image/jpeg": "image/jpeg",
+  "image/webp": "image/webp",
+} as const;
+
+export interface UploadAvatarInput {
+  contentType: UploadAvatarInputContentType;
+  /**
+   * Base64-encoded image bytes (no `data:` prefix). Max 4 MB decoded.
+   * @minLength 1
+   * @maxLength 7000000
+   */
+  dataBase64: string;
 }
 
 export interface PublishListingInput {

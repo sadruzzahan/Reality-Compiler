@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
-import { Loader2, User, ExternalLink } from "lucide-react";
+import { Loader2, User, ExternalLink, Upload, X } from "lucide-react";
 import {
   useGetMe,
   useUpdateMyProfile,
+  useUploadAvatar,
   getGetMeQueryKey,
   getGetDesignerProfileQueryKey,
   getListMarketplaceListingsQueryKey,
@@ -26,24 +27,115 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const BIO_MAX = 500;
 const NAME_MAX = 80;
+const AVATAR_MAX_BYTES = 4 * 1024 * 1024;
+const AVATAR_ACCEPT = "image/png,image/jpeg,image/webp";
+const AVATAR_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("Unexpected reader output"));
+        return;
+      }
+      const idx = result.indexOf(",");
+      resolve(idx >= 0 ? result.slice(idx + 1) : result);
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function MyProfile() {
   const { data: me, isLoading } = useGetMe();
   const updateProfile = useUpdateMyProfile();
+  const uploadAvatar = useUploadAvatar();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
-  const [avatarUrl, setAvatarUrl] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (me) {
       setDisplayName(me.displayName ?? "");
       setBio(me.bio ?? "");
-      setAvatarUrl(me.avatarUrl ?? "");
+      setAvatarUrl(me.avatarUrl ?? null);
     }
   }, [me]);
+
+  const invalidateProfileQueries = (userId: string) => {
+    queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+    queryClient.invalidateQueries({
+      queryKey: getGetDesignerProfileQueryKey(userId),
+    });
+    queryClient.invalidateQueries({
+      queryKey: getListMarketplaceListingsQueryKey(),
+    });
+  };
+
+  const handleAvatarFile = async (file: File) => {
+    if (!me) return;
+    if (!AVATAR_TYPES.has(file.type)) {
+      toast({
+        title: "Unsupported file",
+        description: "Pick a PNG, JPEG, or WebP image.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (file.size > AVATAR_MAX_BYTES) {
+      toast({
+        title: "Image too large",
+        description: "Avatar must be under 4 MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      const dataBase64 = await fileToBase64(file);
+      const updated = await uploadAvatar.mutateAsync({
+        data: {
+          contentType: file.type as "image/png" | "image/jpeg" | "image/webp",
+          dataBase64,
+        },
+      });
+      setAvatarUrl(updated.avatarUrl ?? null);
+      invalidateProfileQueries(me.userId);
+      toast({
+        title: "Avatar updated",
+        description: "Your new avatar is live across the marketplace.",
+      });
+    } catch (e) {
+      toast({
+        title: "Couldn't upload avatar",
+        description: e instanceof Error ? e.message : "Try again",
+        variant: "destructive",
+      });
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleClearAvatar = async () => {
+    if (!me) return;
+    try {
+      await updateProfile.mutateAsync({ data: { avatarUrl: null } });
+      setAvatarUrl(null);
+      invalidateProfileQueries(me.userId);
+      toast({ title: "Avatar removed" });
+    } catch (e) {
+      toast({
+        title: "Couldn't remove avatar",
+        description: e instanceof Error ? e.message : "Try again",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleSave = async () => {
     if (!me) return;
@@ -52,16 +144,9 @@ export default function MyProfile() {
         data: {
           displayName: displayName.trim() ? displayName.trim() : null,
           bio: bio.trim() ? bio.trim() : null,
-          avatarUrl: avatarUrl.trim() ? avatarUrl.trim() : null,
         },
       });
-      queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
-      queryClient.invalidateQueries({
-        queryKey: getGetDesignerProfileQueryKey(me.userId),
-      });
-      queryClient.invalidateQueries({
-        queryKey: getListMarketplaceListingsQueryKey(),
-      });
+      invalidateProfileQueries(me.userId);
       toast({
         title: "Profile saved",
         description: "Your designer profile is updated across the marketplace.",
@@ -83,7 +168,7 @@ export default function MyProfile() {
     );
   }
 
-  const previewAvatar = avatarUrl.trim() || me.imageUrl || undefined;
+  const previewAvatar = avatarUrl ?? me.imageUrl ?? undefined;
   const initial =
     (displayName.trim()[0] ??
       me.firstName?.[0] ??
@@ -185,22 +270,55 @@ export default function MyProfile() {
             </div>
 
             <div className="space-y-2">
-              <Label
-                htmlFor="avatar-url"
-                className="font-mono text-xs uppercase tracking-wider"
-              >
-                Avatar URL
+              <Label className="font-mono text-xs uppercase tracking-wider">
+                Avatar image
               </Label>
-              <Input
-                id="avatar-url"
-                value={avatarUrl}
-                onChange={(e) => setAvatarUrl(e.target.value)}
-                placeholder="https://…"
-                data-testid="input-avatar-url"
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={AVATAR_ACCEPT}
+                className="hidden"
+                data-testid="input-avatar-file"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void handleAvatarFile(file);
+                }}
               />
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="font-mono text-xs"
+                  disabled={uploadAvatar.isPending}
+                  onClick={() => fileInputRef.current?.click()}
+                  data-testid="button-upload-avatar"
+                >
+                  {uploadAvatar.isPending ? (
+                    <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                  ) : (
+                    <Upload className="w-3 h-3 mr-2" />
+                  )}
+                  {avatarUrl ? "Replace avatar" : "Upload avatar"}
+                </Button>
+                {avatarUrl ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="font-mono text-xs"
+                    disabled={updateProfile.isPending}
+                    onClick={() => void handleClearAvatar()}
+                    data-testid="button-clear-avatar"
+                  >
+                    <X className="w-3 h-3 mr-2" />
+                    Remove
+                  </Button>
+                ) : null}
+              </div>
               <div className="text-xs text-muted-foreground font-mono">
-                Optional. Public listing cards and your designer page show
-                a generic placeholder if left blank.
+                PNG, JPEG, or WebP · up to 4 MB. Public listing cards and
+                your designer page show a generic placeholder if left blank.
               </div>
             </div>
 

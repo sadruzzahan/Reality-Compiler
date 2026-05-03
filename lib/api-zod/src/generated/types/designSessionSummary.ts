@@ -17,7 +17,10 @@ export interface DesignSessionSummary {
   category?: string | null;
   /** @nullable */
   primaryMaterial?: string | null;
-  /** @nullable */
+  /**
+   * URL to a hosted image (object storage URL or null)
+   * @nullable
+   */
   thumbnailUrl?: string | null;
   /** @nullable */
   estimatedCostLow?: number | null;

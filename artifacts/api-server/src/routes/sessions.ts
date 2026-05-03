@@ -18,8 +18,9 @@ import {
 } from "@workspace/api-zod";
 import {
   generateDesignSpec,
-  generateConceptImageDataUrl,
+  generateAndStoreConceptImage,
 } from "../lib/designPipeline";
+import { deleteObjectByUrl } from "../lib/objectStorage";
 import { requireAuth, attachUserId } from "../middlewares/auth";
 import { asyncHandler } from "../middlewares/asyncHandler";
 import { parseOrThrow } from "../middlewares/validate";
@@ -163,7 +164,7 @@ async function buildSummaries(userId?: string) {
   return summaries;
 }
 
-async function runPipeline(sessionId: number) {
+async function runPipeline(sessionId: number, userId: string) {
   try {
     const messages = await db
       .select()
@@ -177,7 +178,11 @@ async function runPipeline(sessionId: number) {
     }));
 
     const spec = await generateDesignSpec(history);
-    const imageUrl = await generateConceptImageDataUrl(spec.imagePrompt);
+    const imageUrl = await generateAndStoreConceptImage(
+      spec.imagePrompt,
+      userId,
+      sessionId,
+    );
 
     await db.insert(designOutputsTable).values({
       sessionId,
@@ -310,7 +315,7 @@ router.post(
     });
 
     try {
-      await runPipeline(session.id);
+      await runPipeline(session.id, req.userId!);
     } catch (err) {
       req.log.error({ err }, "Design pipeline failed");
     }
@@ -373,6 +378,20 @@ router.delete(
       return { deletedSession, deletedListing: deletedListing ?? null };
     });
     if (result.deletedSession) {
+      // Best-effort: drop the stored concept images for this session.
+      // Failures are logged inside deleteObjectByUrl and never block the API.
+      try {
+        const outs = await db
+          .select({ imageUrl: designOutputsTable.imageUrl })
+          .from(designOutputsTable)
+          .where(eq(designOutputsTable.sessionId, result.deletedSession.id));
+        await Promise.all(outs.map((o) => deleteObjectByUrl(o.imageUrl)));
+      } catch (err) {
+        req.log.warn(
+          { err, sessionId: result.deletedSession.id },
+          "Failed to enqueue object deletion for session",
+        );
+      }
       await recordAudit({
         actorUserId: req.userId!,
         action: "session.delete",
@@ -455,7 +474,7 @@ router.post(
       .where(eq(designSessionsTable.id, session.id));
 
     try {
-      await runPipeline(session.id);
+      await runPipeline(session.id, req.userId!);
     } catch (err) {
       req.log.error({ err }, "Design pipeline failed");
     }
