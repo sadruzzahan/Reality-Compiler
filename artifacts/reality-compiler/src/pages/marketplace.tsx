@@ -522,13 +522,28 @@ export default function Marketplace() {
                     <ListingCard key={l.id} listing={l} />
                   ))}
                 </div>
+                {isFetchingNextPage ? (
+                  <div
+                    className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5 mt-5"
+                    data-testid="skeleton-row-load-more"
+                    aria-hidden="true"
+                  >
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <Skeleton key={i} className="h-72 rounded-xl" />
+                    ))}
+                  </div>
+                ) : null}
                 <div
                   ref={sentinelRef}
                   className="h-12 mt-6 flex items-center justify-center"
                   data-testid="sentinel-load-more"
                 >
                   {isFetchingNextPage ? (
-                    <span className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
+                    <span
+                      className="flex items-center gap-2 font-mono text-xs text-muted-foreground"
+                      role="status"
+                      aria-live="polite"
+                    >
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       Loading more…
                     </span>

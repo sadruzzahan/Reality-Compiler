@@ -199,15 +199,21 @@ async function resolveCreatorFilter(
 ): Promise<string | null | undefined> {
   if (!creator) return undefined;
   const stripped = creator.startsWith("@") ? creator.slice(1) : creator;
-  // Already a Clerk-style userId? (`user_…`)
-  if (/^user_[A-Za-z0-9]+$/.test(stripped)) return stripped;
-  // Otherwise try matching as a creator_handle on a published listing.
+  // Handles cannot contain a leading `@` (already stripped) and are
+  // restricted to a small character set; anything else (Clerk-style
+  // `user_…` IDs, future provider IDs, etc.) is treated as an opaque
+  // userId and used directly.
+  const looksLikeHandle = /^[a-z0-9][a-z0-9_-]{1,63}$/i.test(stripped);
+  if (!looksLikeHandle) return stripped;
   const [row] = await db
     .select({ userId: marketplaceListingsTable.userId })
     .from(marketplaceListingsTable)
     .where(eq(marketplaceListingsTable.creatorHandle, stripped))
     .limit(1);
-  return row?.userId ?? null;
+  // If we can't resolve the handle to a known creator, fall back to
+  // treating it as an opaque userId rather than 404'ing — this keeps
+  // direct-userId callers working even if their handle table is stale.
+  return row?.userId ?? stripped;
 }
 
 interface ListingFilters {
@@ -305,6 +311,14 @@ router.get(
     const params = parseOrThrow(ListMarketplaceListingsQueryParams, req.query);
     const sort: SortKey = params.sort ?? "popular";
     const limit = params.limit ?? 24;
+
+    if (
+      params.minPrice != null &&
+      params.maxPrice != null &&
+      params.minPrice > params.maxPrice
+    ) {
+      throw badRequest("minPrice must be less than or equal to maxPrice.");
+    }
 
     const creatorUserId = await resolveCreatorFilter(params.creator);
     if (params.creator && creatorUserId === null) {
@@ -450,6 +464,13 @@ router.get(
   "/marketplace/listings/count",
   asyncHandler(async (req, res) => {
     const params = parseOrThrow(CountMarketplaceListingsQueryParams, req.query);
+    if (
+      params.minPrice != null &&
+      params.maxPrice != null &&
+      params.minPrice > params.maxPrice
+    ) {
+      throw badRequest("minPrice must be less than or equal to maxPrice.");
+    }
     const creatorUserId = await resolveCreatorFilter(params.creator);
     if (params.creator && creatorUserId === null) {
       res.json({ total: 0 });
