@@ -117,8 +117,13 @@ async function onCheckoutCompleted(
     logger.warn({ orderId, sessionId: session.id }, "order not found for checkout webhook");
     return;
   }
-  if (existing.paymentStatus === "paid") {
-    // Idempotent: we've already processed this. Stripe likes to redeliver.
+  // Idempotent + monotonic: only `pending_payment` and `failed` may transition
+  // to `paid`. Once an order is `paid`, `refunded`, or `partially_refunded`,
+  // a replayed/out-of-order completion event must not regress its state.
+  if (
+    existing.paymentStatus !== "pending_payment" &&
+    existing.paymentStatus !== "failed"
+  ) {
     return;
   }
 
@@ -126,6 +131,25 @@ async function onCheckoutCompleted(
     typeof session.payment_intent === "string"
       ? session.payment_intent
       : session.payment_intent?.id ?? null;
+
+  // Resolve the charge ID via the PaymentIntent's latest_charge so refunds
+  // and reconciliation can address the charge directly without an extra
+  // round trip later. Best-effort — a missing charge isn't fatal here.
+  let chargeId: string | null = null;
+  if (paymentIntentId) {
+    try {
+      const pi = await getStripe().paymentIntents.retrieve(paymentIntentId);
+      chargeId =
+        typeof pi.latest_charge === "string"
+          ? pi.latest_charge
+          : pi.latest_charge?.id ?? null;
+    } catch (err) {
+      logger.warn(
+        { err, paymentIntentId },
+        "could not retrieve PaymentIntent for charge ID",
+      );
+    }
+  }
 
   const event: OrderStatusEvent = {
     status: "queued",
@@ -138,6 +162,7 @@ async function onCheckoutCompleted(
     .set({
       paymentStatus: "paid",
       stripePaymentIntentId: paymentIntentId,
+      stripeChargeId: chargeId,
       // Promote to active fulfilment now that the buyer has actually paid.
       status: "queued",
       statusHistory: [...existing.statusHistory, event],
@@ -151,7 +176,11 @@ async function onCheckoutCompleted(
     targetType: "order",
     targetId: orderId,
     before: { paymentStatus: existing.paymentStatus },
-    after: { paymentStatus: "paid", stripePaymentIntentId: paymentIntentId },
+    after: {
+      paymentStatus: "paid",
+      stripePaymentIntentId: paymentIntentId,
+      stripeChargeId: chargeId,
+    },
     requestId: null,
   });
 }
@@ -164,8 +193,10 @@ async function onPaymentFailed(intent: Stripe.PaymentIntent): Promise<void> {
     .from(ordersTable)
     .where(eq(ordersTable.id, orderId));
   if (!existing) return;
-  // Don't overwrite a paid order if a stale failure event arrives late.
-  if (existing.paymentStatus === "paid") return;
+  // Idempotent + monotonic: only `pending_payment` may transition to
+  // `failed`. Don't regress a `paid`, `refunded`, or `partially_refunded`
+  // order if a stale failure event arrives late or out of order.
+  if (existing.paymentStatus !== "pending_payment") return;
 
   await db
     .update(ordersTable)

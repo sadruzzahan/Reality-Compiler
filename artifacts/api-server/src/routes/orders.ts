@@ -572,6 +572,14 @@ router.post(
     const params = parseOrThrow(AdvanceOrderParams, req.params);
     const order = await loadOrder(params.id);
     if (!order || order.userId !== req.userId) throw notFound("Order");
+    // Fulfilment may only progress on orders the buyer has actually paid
+    // for. Pending/failed/refunded orders must not move down the supplier
+    // pipeline — that would ship product against unpaid or clawed-back funds.
+    if (order.paymentStatus !== "paid") {
+      throw badRequest(
+        "Order cannot be advanced until payment is complete.",
+      );
+    }
     const currentIdx = STATUS_FLOW.indexOf(order.status as OrderStatus);
     if (currentIdx < 0 || currentIdx >= STATUS_FLOW.length - 1) {
       throw badRequest("Order is already at its final status.");
