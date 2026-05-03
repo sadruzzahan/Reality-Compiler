@@ -23,6 +23,11 @@ export interface OrderSummary {
   designerUserId?: string | null;
   leadTimeDays: number;
   paymentStatus: PaymentStatus;
+  /** Cumulative refunded amount in dollars. Frontends should subtract
+the proportional share from `payoutAmount` when displaying
+net-of-refund earnings.
+ */
+  refundedAmount: number;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -1665,6 +1665,12 @@ components:
           type: integer
         paymentStatus:
           $ref: "#/components/schemas/PaymentStatus"
+        refundedAmount:
+          type: number
+          description: |
+            Cumulative refunded amount in dollars. Frontends should subtract
+            the proportional share from `payoutAmount` when displaying
+            net-of-refund earnings.
         createdAt:
           type: string
           format: date-time
@@ -1682,6 +1688,7 @@ components:
         - payoutAmount
         - leadTimeDays
         - paymentStatus
+        - refundedAmount
         - createdAt
         - updatedAt
 
@@ -1719,6 +1726,18 @@ components:
           type: integer
         paymentStatus:
           $ref: "#/components/schemas/PaymentStatus"
+        refundedAmount:
+          type: number
+          description: |
+            Cumulative refunded amount in dollars. Used by the designer
+            payouts page to show net-of-refund earnings.
+        netPayoutAmount:
+          type: number
+          description: |
+            `payoutAmount` reduced proportionally by any refund on the order.
+            Equals `payoutAmount * (1 - refundedAmount / totalCost)`, floored
+            at 0. Use this for designer earnings totals so the UI cannot drift
+            from refund state.
         createdAt:
           type: string
           format: date-time
@@ -1739,6 +1758,8 @@ components:
         - payoutAmount
         - leadTimeDays
         - paymentStatus
+        - refundedAmount
+        - netPayoutAmount
         - createdAt
         - updatedAt
 

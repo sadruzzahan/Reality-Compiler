@@ -377,6 +377,11 @@ export const ListOrdersResponseItem = zod.object({
     "refunded",
     "partially_refunded",
   ]),
+  refundedAmount: zod
+    .number()
+    .describe(
+      "Cumulative refunded amount in dollars. Frontends should subtract\nthe proportional share from `payoutAmount` when displaying\nnet-of-refund earnings.\n",
+    ),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -551,6 +556,16 @@ export const ListDesignerOrdersResponseItem = zod.object({
     "refunded",
     "partially_refunded",
   ]),
+  refundedAmount: zod
+    .number()
+    .describe(
+      "Cumulative refunded amount in dollars. Used by the designer\npayouts page to show net-of-refund earnings.\n",
+    ),
+  netPayoutAmount: zod
+    .number()
+    .describe(
+      "`payoutAmount` reduced proportionally by any refund on the order.\nEquals `payoutAmount \* (1 - refundedAmount \/ totalCost)`, floored\nat 0. Use this for designer earnings totals so the UI cannot drift\nfrom refund state.\n",
+    ),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });

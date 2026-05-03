@@ -26,6 +26,16 @@ export interface DesignerOrderSummary {
   payoutAmount: number;
   leadTimeDays: number;
   paymentStatus: PaymentStatus;
+  /** Cumulative refunded amount in dollars. Used by the designer
+payouts page to show net-of-refund earnings.
+ */
+  refundedAmount: number;
+  /** `payoutAmount` reduced proportionally by any refund on the order.
+Equals `payoutAmount * (1 - refundedAmount / totalCost)`, floored
+at 0. Use this for designer earnings totals so the UI cannot drift
+from refund state.
+ */
+  netPayoutAmount: number;
   createdAt: Date;
   updatedAt: Date;
 }

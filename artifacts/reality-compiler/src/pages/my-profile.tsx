@@ -1,9 +1,20 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "wouter";
-import { Loader2, User, ExternalLink, Upload, X } from "lucide-react";
+import {
+  Loader2,
+  User,
+  ExternalLink,
+  Upload,
+  X,
+  CreditCard,
+  CheckCircle2,
+  AlertTriangle,
+  ArrowRight,
+} from "lucide-react";
 import {
   useGetMe,
   useUpdateMyProfile,
+  useGetConnectStatus,
   customFetch,
   getGetMeQueryKey,
   getGetDesignerProfileQueryKey,
@@ -33,6 +44,84 @@ const NAME_MAX = 80;
 const AVATAR_MAX_BYTES = 4 * 1024 * 1024;
 const AVATAR_ACCEPT = "image/png,image/jpeg,image/webp";
 const AVATAR_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+
+function PayoutsSetupCard() {
+  // Surfaces the Stripe Connect onboarding state in the user's profile so
+  // designers see at a glance whether payouts are wired up. The full
+  // onboarding flow lives on /payouts; here we only show status + a deep
+  // link, which keeps this page focused on profile concerns.
+  const { data: status, isLoading } = useGetConnectStatus();
+
+  let statusLine: { icon: ReactNode; text: string; tone: string };
+  if (isLoading) {
+    statusLine = {
+      icon: <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />,
+      text: "Checking payout status…",
+      tone: "text-muted-foreground",
+    };
+  } else if (!status?.configured) {
+    statusLine = {
+      icon: <AlertTriangle className="w-4 h-4 text-amber-500" />,
+      text: "Stripe is not configured by the platform yet.",
+      tone: "text-amber-700 dark:text-amber-400",
+    };
+  } else if (status.status === "enabled") {
+    statusLine = {
+      icon: <CheckCircle2 className="w-4 h-4 text-emerald-500" />,
+      text: "Connected — payouts enabled.",
+      tone: "text-emerald-600 dark:text-emerald-400",
+    };
+  } else if (status.accountId) {
+    statusLine = {
+      icon: <AlertTriangle className="w-4 h-4 text-amber-500" />,
+      text:
+        status.status === "restricted"
+          ? "Action required — Stripe needs more details before paying you out."
+          : "Onboarding incomplete — finish Stripe to start receiving payouts.",
+      tone: "text-amber-700 dark:text-amber-400",
+    };
+  } else {
+    statusLine = {
+      icon: <CreditCard className="w-4 h-4 text-muted-foreground" />,
+      text: "No payout account connected — you'll earn but can't be paid out.",
+      tone: "text-muted-foreground",
+    };
+  }
+
+  return (
+    <Card data-testid="card-profile-payouts-setup">
+      <CardHeader>
+        <CardTitle className="font-sans text-lg flex items-center gap-2">
+          <CreditCard className="w-4 h-4 text-primary" />
+          Payouts setup
+        </CardTitle>
+        <CardDescription>
+          Connect a Stripe account to receive 70% of every license sale on
+          your published designs.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex items-center justify-between gap-4 flex-wrap">
+        <div className={`text-sm flex items-center gap-2 ${statusLine.tone}`}>
+          {statusLine.icon}
+          <span data-testid="text-profile-payouts-status">
+            {statusLine.text}
+          </span>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          asChild
+          className="font-mono text-xs"
+        >
+          <Link href="/payouts" data-testid="link-profile-payouts">
+            Manage payouts
+            <ArrowRight className="w-3 h-3 ml-1" />
+          </Link>
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
 
 async function uploadAvatarStreaming(file: File): Promise<Me> {
   return customFetch<Me>("/me/avatar", {
@@ -329,6 +418,10 @@ export default function MyProfile() {
             </div>
           </CardContent>
         </Card>
+
+        <div className="mt-6">
+          <PayoutsSetupCard />
+        </div>
 
         <div className="mt-6">
           <PrivacyDataCard />

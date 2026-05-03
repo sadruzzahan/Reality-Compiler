@@ -237,12 +237,16 @@ export default function Payouts() {
   );
   const { data: orders, isLoading } = useListDesignerOrders();
 
+  // `netPayoutAmount` is computed server-side as
+  // payoutAmount * (1 - refundedAmount/totalCost), so refunded and
+  // partially-refunded orders shrink (or zero out) earnings totals
+  // instead of inflating them.
   const totalEarned =
-    orders?.reduce((sum, o) => sum + o.payoutAmount, 0) ?? 0;
+    orders?.reduce((sum, o) => sum + o.netPayoutAmount, 0) ?? 0;
   const paidOut =
     orders
       ?.filter((o) => o.status === "delivered")
-      .reduce((sum, o) => sum + o.payoutAmount, 0) ?? 0;
+      .reduce((sum, o) => sum + o.netPayoutAmount, 0) ?? 0;
   const pending = totalEarned - paidOut;
 
   return (
@@ -419,16 +423,28 @@ export default function Payouts() {
                         </Badge>
                       </TableCell>
                       <TableCell
-                        className="text-right font-mono text-sm font-medium text-emerald-500"
+                        className={`text-right font-mono text-sm font-medium ${
+                          order.netPayoutAmount < order.payoutAmount
+                            ? "text-muted-foreground"
+                            : "text-emerald-500"
+                        }`}
                         data-testid={`text-payout-amount-${order.id}`}
                       >
                         <span className="inline-flex items-center gap-1">
                           <TrendingUp className="w-3 h-3" />$
-                          {order.payoutAmount.toLocaleString(undefined, {
+                          {order.netPayoutAmount.toLocaleString(undefined, {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           })}
                         </span>
+                        {order.netPayoutAmount < order.payoutAmount ? (
+                          <div className="text-[10px] text-muted-foreground/80 line-through">
+                            ${order.payoutAmount.toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </div>
+                        ) : null}
                       </TableCell>
                       <TableCell className="text-right text-xs text-muted-foreground font-mono">
                         {formatDistanceToNow(new Date(order.createdAt), {

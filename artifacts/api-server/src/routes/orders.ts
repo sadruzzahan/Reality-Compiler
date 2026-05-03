@@ -176,6 +176,7 @@ router.get(
           designerUserId: r.order.designerUserId,
           leadTimeDays: r.order.leadTimeDays,
           paymentStatus: r.order.paymentStatus,
+          refundedAmount: Number(r.order.refundedAmount),
           createdAt: r.order.createdAt.toISOString(),
           updatedAt: r.order.updatedAt.toISOString(),
         };
@@ -290,6 +291,18 @@ router.get(
       const listingDeleted =
         r.order.marketplaceListingId != null &&
         (listing == null || listing.deletedAt != null);
+      const totalCostNum = Number(r.order.totalCost);
+      const refundedNum = Number(r.order.refundedAmount);
+      const payoutNum = Number(r.order.payoutAmount);
+      // Refunds are taken proportionally from the whole charge, so the
+      // designer's share shrinks by the same fraction. Floor at 0 so a tiny
+      // rounding overshoot can't produce a negative payout. Computing this
+      // server-side keeps the UI from drifting away from the source of truth.
+      const refundFraction =
+        totalCostNum > 0 ? Math.min(1, refundedNum / totalCostNum) : 0;
+      const netPayoutAmount =
+        Math.round(Math.max(0, payoutNum * (1 - refundFraction)) * 100) /
+        100;
       return {
         id: r.order.id,
         sessionId: r.order.sessionId,
@@ -302,8 +315,10 @@ router.get(
         supplierName: r.supplier.name,
         status: r.order.status as OrderStatus,
         quantity: r.order.quantity,
-        totalCost: Number(r.order.totalCost),
-        payoutAmount: Number(r.order.payoutAmount),
+        totalCost: totalCostNum,
+        payoutAmount: payoutNum,
+        refundedAmount: refundedNum,
+        netPayoutAmount,
         paymentStatus: r.order.paymentStatus,
         leadTimeDays: r.order.leadTimeDays,
         createdAt: r.order.createdAt.toISOString(),
