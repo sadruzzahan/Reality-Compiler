@@ -73,7 +73,12 @@ async function buildSummary(
   const [{ c }] = await db
     .select({ c: sql<number>`count(*)::int` })
     .from(ordersTable)
-    .where(eq(ordersTable.marketplaceListingId, listing.id));
+    .where(
+      and(
+        eq(ordersTable.marketplaceListingId, listing.id),
+        isNull(ordersTable.deletedAt),
+      ),
+    );
   const resolvedProfile =
     profile === undefined
       ? (await loadProfilesByUserIds([listing.userId])).get(listing.userId) ?? null
@@ -256,7 +261,12 @@ router.get(
     const [{ c }] = await db
       .select({ c: sql<number>`count(*)::int` })
       .from(ordersTable)
-      .where(eq(ordersTable.marketplaceListingId, listing.id));
+      .where(
+        and(
+          eq(ordersTable.marketplaceListingId, listing.id),
+          isNull(ordersTable.deletedAt),
+        ),
+      );
     const quotes = await ensureQuotesForListing(listing.sessionId, output);
     res.json({
       id: listing.id,
@@ -378,7 +388,12 @@ router.post(
     const [{ c }] = await db
       .select({ c: sql<number>`count(*)::int` })
       .from(ordersTable)
-      .where(eq(ordersTable.marketplaceListingId, listing.id));
+      .where(
+        and(
+          eq(ordersTable.marketplaceListingId, listing.id),
+          isNull(ordersTable.deletedAt),
+        ),
+      );
     const quotes = await ensureQuotesForListing(sessionId, output);
     res.status(201).json({
       id: listing.id,
@@ -465,7 +480,12 @@ router.get(
         payouts: sql<string>`coalesce(sum(${ordersTable.payoutAmount}), 0)::text`,
       })
       .from(ordersTable)
-      .where(eq(ordersTable.designerUserId, targetUserId));
+      .where(
+        and(
+          eq(ordersTable.designerUserId, targetUserId),
+          isNull(ordersTable.deletedAt),
+        ),
+      );
     const handle =
       listings[0]?.creatorHandle ?? (await resolveHandle(targetUserId));
 

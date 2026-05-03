@@ -5,6 +5,7 @@ import {
   designSessionsTable,
   designMessagesTable,
   designOutputsTable,
+  marketplaceListingsTable,
   recordAudit,
 } from "@workspace/db";
 import {
@@ -338,28 +339,65 @@ router.delete(
   requireAuth,
   asyncHandler(async (req, res) => {
     const params = parseOrThrow(DeleteSessionParams, req.params);
-    // Soft-delete: keep the row for audit/recovery and detach it from any
-    // marketplace surfaces by stamping `deleted_at`.
-    const [deleted] = await db
-      .update(designSessionsTable)
-      .set({ deletedAt: new Date(), updatedAt: new Date() })
-      .where(
-        and(
-          eq(designSessionsTable.id, params.id),
-          eq(designSessionsTable.userId, req.userId!),
-          isNull(designSessionsTable.deletedAt),
-        ),
-      )
-      .returning();
-    if (deleted) {
+    // Soft-delete the session AND any marketplace listing tied to it in one
+    // transaction. Previously the hard delete relied on FK CASCADE; with
+    // soft-deletes we must propagate explicitly so deleted sessions don't
+    // leave dangling public listings.
+    const result = await db.transaction(async (tx) => {
+      const [deletedSession] = await tx
+        .update(designSessionsTable)
+        .set({ deletedAt: new Date(), updatedAt: new Date() })
+        .where(
+          and(
+            eq(designSessionsTable.id, params.id),
+            eq(designSessionsTable.userId, req.userId!),
+            isNull(designSessionsTable.deletedAt),
+          ),
+        )
+        .returning();
+      if (!deletedSession) return { deletedSession: null, deletedListing: null };
+      const [deletedListing] = await tx
+        .update(marketplaceListingsTable)
+        .set({
+          deletedAt: new Date(),
+          status: "removed",
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(marketplaceListingsTable.sessionId, deletedSession.id),
+            isNull(marketplaceListingsTable.deletedAt),
+          ),
+        )
+        .returning();
+      return { deletedSession, deletedListing: deletedListing ?? null };
+    });
+    if (result.deletedSession) {
       await recordAudit({
         actorUserId: req.userId!,
         action: "session.delete",
         targetType: "design_session",
-        targetId: deleted.id,
-        before: { status: deleted.status, title: deleted.title },
+        targetId: result.deletedSession.id,
+        before: {
+          status: result.deletedSession.status,
+          title: result.deletedSession.title,
+        },
         requestId: req.id ? String(req.id) : null,
       });
+      if (result.deletedListing) {
+        await recordAudit({
+          actorUserId: req.userId!,
+          action: "listing.unpublish",
+          targetType: "marketplace_listing",
+          targetId: result.deletedListing.id,
+          before: {
+            status: result.deletedListing.status,
+            title: result.deletedListing.title,
+            reason: "session.delete cascade",
+          },
+          requestId: req.id ? String(req.id) : null,
+        });
+      }
     }
     res.sendStatus(204);
   }),

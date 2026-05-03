@@ -79,6 +79,8 @@ export const quotesTable = pgTable(
   ],
 );
 
+// `orders.quote_id` FK index is declared in the orders table below.
+
 export type ShippingAddress = {
   recipient: string;
   line1: string;
@@ -145,6 +147,7 @@ export const ordersTable = pgTable(
     index("orders_marketplace_listing_id_idx").on(t.marketplaceListingId),
     index("orders_session_id_idx").on(t.sessionId),
     index("orders_supplier_id_idx").on(t.supplierId),
+    index("orders_quote_id_idx").on(t.quoteId),
     index("orders_status_idx").on(t.status),
     index("orders_deleted_at_idx").on(t.deletedAt),
     index("orders_created_at_idx").on(t.createdAt),

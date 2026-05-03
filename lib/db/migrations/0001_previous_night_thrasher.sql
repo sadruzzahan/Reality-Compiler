@@ -1,0 +1,1 @@
+CREATE INDEX "orders_quote_id_idx" ON "orders" USING btree ("quote_id");
