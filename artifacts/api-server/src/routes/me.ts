@@ -83,40 +83,55 @@ router.patch(
     const userId = req.userId!;
     const body = parseOrThrow(UpdateMyProfileBody, req.body);
 
-    const normalize = (v: string | null | undefined): string | null => {
-      if (v === undefined || v === null) return null;
+    const normalize = (v: string | null): string | null => {
+      if (v === null) return null;
       const trimmed = v.trim();
       return trimmed.length === 0 ? null : trimmed;
     };
 
-    const nextAvatarUrl = normalize(body.avatarUrl);
     // Only allow clearing the avatar via PATCH; new avatars must go through
     // POST /me/avatar so they land in object storage.
-    if (body.avatarUrl !== undefined && nextAvatarUrl !== null) {
-      throw badRequest(
-        "avatarUrl can only be cleared (set to null) via this endpoint; upload via POST /me/avatar.",
-      );
+    let nextAvatarUrl: string | null | undefined = undefined;
+    if (body.avatarUrl !== undefined) {
+      nextAvatarUrl = normalize(body.avatarUrl);
+      if (nextAvatarUrl !== null) {
+        throw badRequest(
+          "avatarUrl can only be cleared (set to null) via this endpoint; upload via POST /me/avatar.",
+        );
+      }
     }
 
-    const values = {
-      displayName: normalize(body.displayName),
-      bio: normalize(body.bio),
-      avatarUrl: nextAvatarUrl,
-    };
+    // Build a partial update set with only the fields the caller provided
+    // so that omitted fields are preserved.
+    const setValues: Partial<{
+      displayName: string | null;
+      bio: string | null;
+      avatarUrl: string | null;
+      updatedAt: Date;
+    }> = { updatedAt: new Date() };
+    if (body.displayName !== undefined)
+      setValues.displayName = normalize(body.displayName);
+    if (body.bio !== undefined) setValues.bio = normalize(body.bio);
+    if (nextAvatarUrl !== undefined) setValues.avatarUrl = nextAvatarUrl;
 
     const previous =
       body.avatarUrl !== undefined ? await loadProfile(userId) : null;
 
     await db
       .insert(userProfilesTable)
-      .values({ userId, ...values })
+      .values({
+        userId,
+        displayName: setValues.displayName ?? null,
+        bio: setValues.bio ?? null,
+        avatarUrl: setValues.avatarUrl ?? null,
+      })
       .onConflictDoUpdate({
         target: userProfilesTable.userId,
-        set: { ...values, updatedAt: new Date() },
+        set: setValues,
       });
 
     if (
-      body.avatarUrl !== undefined &&
+      nextAvatarUrl !== undefined &&
       previous?.avatarUrl &&
       previous.avatarUrl !== nextAvatarUrl
     ) {
