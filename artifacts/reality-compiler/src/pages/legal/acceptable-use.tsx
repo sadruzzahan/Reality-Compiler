@@ -14,27 +14,74 @@ export default function AcceptableUsePage() {
       }
       sections={[
         {
-          id: "prohibited",
-          title: "Prohibited uses",
+          id: "prohibited-products",
+          title: "Prohibited products",
+          body: (
+            <>
+              <p className="mb-3">
+                You may not use the Service to design, list, sell, or have
+                manufactured any product that falls into the following
+                categories:
+              </p>
+              <ul className="list-disc pl-5 space-y-2">
+                <li>
+                  <strong>Weapons &amp; munitions.</strong> Firearms,
+                  firearm parts (including unfinished receivers, suppressors,
+                  auto-sears, conversion devices), ammunition, explosives,
+                  pyrotechnics, or anything classed as a weapon under the
+                  laws of the country of manufacture or shipment.
+                </li>
+                <li>
+                  <strong>Drugs &amp; drug paraphernalia.</strong> Items
+                  primarily intended to facilitate the use, manufacture, or
+                  concealment of controlled substances.
+                </li>
+                <li>
+                  <strong>Surveillance &amp; stalkerware.</strong> Hidden
+                  cameras, audio bugs, GPS trackers, or covert recording
+                  devices marketed for use without the target's knowledge.
+                </li>
+                <li>
+                  <strong>Hate &amp; extremism.</strong> Symbols, flags, or
+                  paraphernalia of designated terrorist organisations or
+                  designed to incite violence against a protected group.
+                </li>
+                <li>
+                  <strong>Sexual content involving minors.</strong> CSAM,
+                  any depiction or facilitation of the sexual abuse of
+                  minors, including AI-generated likenesses.
+                </li>
+                <li>
+                  <strong>Counterfeits &amp; IP infringement.</strong>{" "}
+                  Replicas of trademarked products, copyrighted works,
+                  patented mechanisms, or trade-dress lookalikes; designs
+                  scraped from another creator without licence.
+                </li>
+                <li>
+                  <strong>Regulated medical, automotive, aerospace,
+                  electrical, or food-contact goods</strong> that lack the
+                  certification required in the destination market (FDA,
+                  CE, UL, FCC, DOT, etc.).
+                </li>
+                <li>
+                  <strong>Hazardous materials.</strong> Radioactive,
+                  biohazardous, or strongly corrosive substances; lithium
+                  cells outside UN 38.3 compliance.
+                </li>
+                <li>
+                  <strong>Wildlife &amp; protected resources.</strong>{" "}
+                  Items containing ivory, rhino horn, sea turtle shell, or
+                  any CITES-listed species.
+                </li>
+              </ul>
+            </>
+          ),
+        },
+        {
+          id: "prohibited-conduct",
+          title: "Prohibited conduct",
           body: (
             <ul className="list-disc pl-5 space-y-2">
-              <li>
-                Designing weapons, ammunition, or weapon components
-                (including untraceable firearms).
-              </li>
-              <li>
-                Generating products that infringe on third-party trademarks,
-                trade dress, or patented mechanisms.
-              </li>
-              <li>
-                Designing CSAM, content depicting real minors in sexualised
-                contexts, or other content prohibited by law.
-              </li>
-              <li>
-                Designs intended to evade safety regulations (medical,
-                automotive, electrical, food-contact, etc.) without
-                appropriate certification.
-              </li>
               <li>
                 Submitting prompts containing other people's personal data,
                 secrets, or regulated data (PHI, payment details, etc.).
@@ -42,6 +89,10 @@ export default function AcceptableUsePage() {
               <li>
                 Automated scraping, denial-of-service attempts, or
                 circumventing rate limits and authentication.
+              </li>
+              <li>
+                Using the Service to spam, harass, or impersonate other
+                people or businesses.
               </li>
             </ul>
           ),

@@ -92,6 +92,40 @@ export async function deleteObjectByKey(key: string): Promise<void> {
   }
 }
 
+/**
+ * Lists every object whose key starts with the given prefix and deletes it.
+ * Used by the account-purge job so that any orphaned writes (avatars,
+ * generated images, intermediate uploads) are cleaned up even when the DB
+ * has lost its reference to them.
+ *
+ * Returns the number of objects actually deleted.
+ */
+export async function deleteObjectsByPrefix(prefix: string): Promise<number> {
+  const dir = getPrivateDir();
+  const fullPrefix = `${dir}/${prefix}`;
+  const { bucketName, objectName } = parseObjectPath(fullPrefix);
+  let deleted = 0;
+  try {
+    const [files] = await objectStorageClient
+      .bucket(bucketName)
+      .getFiles({ prefix: objectName });
+    for (const file of files) {
+      try {
+        await file.delete({ ignoreNotFound: true });
+        deleted += 1;
+      } catch (err) {
+        logger.warn(
+          { err, name: file.name },
+          "object storage prefix delete failed",
+        );
+      }
+    }
+  } catch (err) {
+    logger.warn({ err, prefix }, "object storage prefix list failed");
+  }
+  return deleted;
+}
+
 export async function deleteObjectByUrl(
   url: string | null | undefined,
 ): Promise<void> {

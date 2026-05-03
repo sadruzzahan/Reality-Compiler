@@ -716,6 +716,33 @@ export const PurgeDeletedAccountsResponse = zod.object({
 });
 
 /**
+ * Public endpoint. Validates the payload, persists it to the audit
+log so operators can review and respond, and returns 202.
+
+ * @summary Send a support / abuse / privacy message
+ */
+export const submitContactMessageBodyNameMin = 2;
+export const submitContactMessageBodyNameMax = 120;
+
+export const submitContactMessageBodyEmailMax = 254;
+
+export const submitContactMessageBodyMessageMin = 10;
+export const submitContactMessageBodyMessageMax = 5000;
+
+export const SubmitContactMessageBody = zod.object({
+  name: zod
+    .string()
+    .min(submitContactMessageBodyNameMin)
+    .max(submitContactMessageBodyNameMax),
+  email: zod.string().email().max(submitContactMessageBodyEmailMax),
+  topic: zod.enum(["general", "privacy", "security", "legal", "abuse"]),
+  message: zod
+    .string()
+    .min(submitContactMessageBodyMessageMin)
+    .max(submitContactMessageBodyMessageMax),
+});
+
+/**
  * Streams an image (PNG, JPEG, or WebP, max 4 MB) directly into
 object storage; the request body is the raw image bytes and the
 `Content-Type` header selects the image type. Returns the updated

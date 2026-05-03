@@ -10,7 +10,7 @@ import {
   userProfilesTable,
   recordAudit,
 } from "@workspace/db";
-import { deleteObjectByUrl, deleteObjectByKey } from "./objectStorage";
+import { deleteObjectByUrl, deleteObjectsByPrefix } from "./objectStorage";
 import { logger } from "./logger";
 
 const ANON_PREFIX = "deleted-user:";
@@ -103,14 +103,18 @@ export async function softDeleteAccount(
         .set({ designerUserId: anonId, updatedAt: now })
         .where(eq(ordersTable.designerUserId, userId));
 
-      // Profile soft-delete + best-effort PII scrub.
+      // Profile soft-delete + best-effort PII scrub. We deliberately do NOT
+      // null `avatarUrl` yet — `purgeDeletedAccounts` uses that direct URL
+      // as a precise reference when hard-deleting the avatar object after
+      // the grace window. The object itself remains private + non-indexed
+      // and the row is marked deletedAt so the public profile reads
+      // already 404.
       await tx
         .insert(userProfilesTable)
         .values({
           userId,
           displayName: null,
           bio: null,
-          avatarUrl: null,
           deletedAt: now,
         })
         .onConflictDoUpdate({
@@ -118,7 +122,6 @@ export async function softDeleteAccount(
           set: {
             displayName: null,
             bio: null,
-            avatarUrl: null,
             deletedAt: now,
             updatedAt: now,
           },
@@ -228,13 +231,6 @@ export async function purgeDeletedAccounts(
           objectsDeleted += 1;
         }
       }
-      // Best-effort wipe of any remaining keys under the user prefix
-      // (covers orphaned writes that never made it into design_outputs).
-      try {
-        await deleteObjectByKey(`avatars/${encodeURIComponent(userId)}/`);
-      } catch (err) {
-        logger.warn({ err, userId }, "purge: avatar prefix cleanup failed");
-      }
 
       const purgedSessions = await db
         .delete(designSessionsTable)
@@ -242,6 +238,13 @@ export async function purgeDeletedAccounts(
         .returning({ id: designSessionsTable.id });
       sessionsPurged += purgedSessions.length;
     }
+
+    // Best-effort wipe of any remaining keys under this user's prefixes,
+    // regardless of whether they had sessions. Catches orphaned writes
+    // (failed uploads, intermediate generations) the DB no longer references.
+    const userKey = encodeURIComponent(userId);
+    objectsDeleted += await deleteObjectsByPrefix(`avatars/${userKey}/`);
+    objectsDeleted += await deleteObjectsByPrefix(`sessions/${userKey}/`);
 
     const purgedListings = await db
       .delete(marketplaceListingsTable)

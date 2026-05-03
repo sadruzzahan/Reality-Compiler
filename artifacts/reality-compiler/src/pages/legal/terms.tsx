@@ -88,15 +88,55 @@ export default function TermsPage() {
         },
         {
           id: "payments",
-          title: "6. Orders &amp; payouts",
+          title: "6. Orders, fees &amp; designer payouts",
           body: (
-            <p>
-              Orders placed through the Service are fulfilled by independent
-              contract manufacturers. We facilitate the order, take a
-              platform fee, and remit any designer payout to the creator of
-              the original listing. Refunds and disputes are handled per the
-              order page on a case-by-case basis.
-            </p>
+            <>
+              <p>
+                Orders placed through the Service are fulfilled by independent
+                contract manufacturers. We facilitate the order, take a
+                platform fee, and remit any designer payout to the creator of
+                the original marketplace listing.
+              </p>
+              <p>
+                <strong>Revenue split.</strong> Unless a separate written
+                agreement says otherwise, marketplace orders are split{" "}
+                <strong>70 % to the designer / 30 % to Reality Compiler</strong>{" "}
+                of the order subtotal (price × quantity, net of refunds,
+                chargebacks, taxes, and manufacturing cost). The 30 % covers
+                payment processing, hosting, AI inference, supplier
+                coordination, and platform support.
+              </p>
+              <p>
+                <strong>Payout conditions.</strong> Designer payouts accrue on
+                the order's <em>delivered</em> status and become payable{" "}
+                <strong>14 days after delivery</strong> (the dispute window).
+                Payouts of $50 or more are issued automatically; smaller
+                balances roll over until the threshold is reached. We may
+                withhold a payout pending investigation of suspected fraud,
+                IP infringement, AUP violations, or chargebacks.
+              </p>
+              <p>
+                <strong>Refunds.</strong> Buyers may request a refund within
+                14 days of delivery for items that materially differ from the
+                listing, arrive damaged, or are not delivered. Approved
+                refunds are reversed against the original order, including
+                the designer payout for that order. We do not refund custom
+                or "made-to-order" items that match the spec accepted by the
+                buyer at checkout.
+              </p>
+              <p>
+                <strong>Intellectual property &amp; licence.</strong> You
+                retain ownership of designs you create. By publishing a
+                marketplace listing you grant Reality Compiler a worldwide,
+                non-exclusive, royalty-free licence to host, display,
+                transmit, and reproduce the listing's images, text, and BOM
+                for the purposes of operating the marketplace, fulfilling
+                orders, and promoting the Service. Buyers receive the
+                physical good only — they do not receive a licence to the
+                underlying design files or to manufacture additional units
+                without your separate consent.
+              </p>
+            </>
           ),
         },
         {

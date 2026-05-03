@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Switch,
   Route,
@@ -128,6 +128,100 @@ function SignInPage() {
 }
 
 function SignUpPage() {
+  const STORAGE_KEY = "rc_signup_consent_v1";
+  const [accepted, setAccepted] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  const onAccept = () => {
+    try {
+      localStorage.setItem(STORAGE_KEY, "1");
+    } catch {
+      // ignore quota / private-mode failures
+    }
+    setAccepted(true);
+  };
+
+  if (!accepted) {
+    return (
+      <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4 py-10">
+        <div
+          className="w-full max-w-md rounded-lg border border-border/60 bg-card p-6 space-y-5"
+          data-testid="signup-consent-gate"
+        >
+          <div className="space-y-2">
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">
+              Before you continue
+            </p>
+            <h1 className="text-2xl font-semibold">Two quick confirmations</h1>
+            <p className="text-sm text-muted-foreground">
+              Reality Compiler is for adults building real hardware. We need
+              your acknowledgement before creating an account.
+            </p>
+          </div>
+          <label
+            className="flex items-start gap-3 cursor-pointer"
+            data-testid="checkbox-signup-consent-label"
+          >
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4 accent-primary"
+              data-testid="checkbox-signup-consent"
+              onChange={(e) => {
+                if (e.target.checked) onAccept();
+              }}
+            />
+            <span className="text-sm text-foreground/90">
+              I confirm I am at least <strong>18 years old</strong> and I
+              accept the{" "}
+              <a
+                href={`${basePath}/terms`}
+                className="text-primary underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Terms
+              </a>
+              ,{" "}
+              <a
+                href={`${basePath}/acceptable-use`}
+                className="text-primary underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Acceptable Use Policy
+              </a>
+              , and{" "}
+              <a
+                href={`${basePath}/privacy`}
+                className="text-primary underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Privacy Policy
+              </a>
+              .
+            </span>
+          </label>
+          <p className="text-xs text-muted-foreground">
+            You must tick this box to continue. Already have an account?{" "}
+            <a
+              href={`${basePath}/sign-in`}
+              className="text-primary underline"
+            >
+              Sign in
+            </a>
+            .
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-background px-4 py-10">
       <SignUp
@@ -139,7 +233,7 @@ function SignUpPage() {
         className="mt-6 text-center text-xs text-muted-foreground max-w-sm"
         data-testid="signup-legal-notice"
       >
-        By continuing you agree to our{" "}
+        You confirmed you are 18+ and accepted our{" "}
         <a href={`${basePath}/terms`} className="text-primary underline">
           Terms
         </a>
@@ -153,8 +247,8 @@ function SignUpPage() {
         , and{" "}
         <a href={`${basePath}/privacy`} className="text-primary underline">
           Privacy Policy
-        </a>{" "}
-        and confirm you are 18 or older.
+        </a>
+        .
       </p>
     </div>
   );

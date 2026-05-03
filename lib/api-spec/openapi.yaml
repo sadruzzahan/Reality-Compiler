@@ -488,6 +488,34 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /contact:
+    post:
+      operationId: submitContactMessage
+      tags: [me]
+      summary: Send a support / abuse / privacy message
+      description: |
+        Public endpoint. Validates the payload, persists it to the audit
+        log so operators can review and respond, and returns 202.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContactInput"
+      responses:
+        "202":
+          description: Message accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContactAck"
+        "400":
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /me/avatar:
     post:
       operationId: uploadAvatar
@@ -1295,6 +1323,33 @@ components:
         sessionsPurged: { type: integer }
         listingsPurged: { type: integer }
         objectsDeleted: { type: integer }
+
+    ContactInput:
+      type: object
+      required: [name, email, topic, message]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 120
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        topic:
+          type: string
+          enum: [general, privacy, security, legal, abuse]
+        message:
+          type: string
+          minLength: 10
+          maxLength: 5000
+
+    ContactAck:
+      type: object
+      required: [ok, ref]
+      properties:
+        ok: { type: boolean }
+        ref: { type: string }
 
     PublishListingInput:
       type: object

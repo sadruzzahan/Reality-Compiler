@@ -316,6 +316,38 @@ export interface PurgeSummary {
   objectsDeleted: number;
 }
 
+export type ContactInputTopic =
+  (typeof ContactInputTopic)[keyof typeof ContactInputTopic];
+
+export const ContactInputTopic = {
+  general: "general",
+  privacy: "privacy",
+  security: "security",
+  legal: "legal",
+  abuse: "abuse",
+} as const;
+
+export interface ContactInput {
+  /**
+   * @minLength 2
+   * @maxLength 120
+   */
+  name: string;
+  /** @maxLength 254 */
+  email: string;
+  topic: ContactInputTopic;
+  /**
+   * @minLength 10
+   * @maxLength 5000
+   */
+  message: string;
+}
+
+export interface ContactAck {
+  ok: boolean;
+  ref: string;
+}
+
 export interface PublishListingInput {
   sessionId: number;
   title: string;

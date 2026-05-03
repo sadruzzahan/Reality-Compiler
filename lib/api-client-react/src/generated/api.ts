@@ -18,6 +18,8 @@ import type {
 
 import type {
   AccountDeletionSummary,
+  ContactAck,
+  ContactInput,
   CreateSessionInput,
   DesignMessage,
   DesignSession,
@@ -1778,6 +1780,95 @@ export const usePurgeDeletedAccounts = <
   TContext
 > => {
   return useMutation(getPurgeDeletedAccountsMutationOptions(options));
+};
+
+/**
+ * Public endpoint. Validates the payload, persists it to the audit
+log so operators can review and respond, and returns 202.
+
+ * @summary Send a support / abuse / privacy message
+ */
+export const getSubmitContactMessageUrl = () => {
+  return `/api/contact`;
+};
+
+export const submitContactMessage = async (
+  contactInput: ContactInput,
+  options?: RequestInit,
+): Promise<ContactAck> => {
+  return customFetch<ContactAck>(getSubmitContactMessageUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(contactInput),
+  });
+};
+
+export const getSubmitContactMessageMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitContactMessage>>,
+    TError,
+    { data: BodyType<ContactInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof submitContactMessage>>,
+  TError,
+  { data: BodyType<ContactInput> },
+  TContext
+> => {
+  const mutationKey = ["submitContactMessage"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof submitContactMessage>>,
+    { data: BodyType<ContactInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return submitContactMessage(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SubmitContactMessageMutationResult = NonNullable<
+  Awaited<ReturnType<typeof submitContactMessage>>
+>;
+export type SubmitContactMessageMutationBody = BodyType<ContactInput>;
+export type SubmitContactMessageMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Send a support / abuse / privacy message
+ */
+export const useSubmitContactMessage = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitContactMessage>>,
+    TError,
+    { data: BodyType<ContactInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof submitContactMessage>>,
+  TError,
+  { data: BodyType<ContactInput> },
+  TContext
+> => {
+  return useMutation(getSubmitContactMessageMutationOptions(options));
 };
 
 /**

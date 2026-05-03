@@ -8,6 +8,7 @@ import marketplaceRouter from "./marketplace";
 import meRouter from "./me";
 import storageRouter from "./storage";
 import adminRouter from "./admin";
+import contactRouter from "./contact";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(marketplaceRouter);
 router.use(meRouter);
 router.use(storageRouter);
 router.use(adminRouter);
+router.use(contactRouter);
 
 export default router;
