@@ -89,11 +89,23 @@ router.patch(
       return trimmed.length === 0 ? null : trimmed;
     };
 
+    const nextAvatarUrl = normalize(body.avatarUrl);
+    // Only allow clearing the avatar via PATCH; new avatars must go through
+    // POST /me/avatar so they land in object storage.
+    if (body.avatarUrl !== undefined && nextAvatarUrl !== null) {
+      throw badRequest(
+        "avatarUrl can only be cleared (set to null) via this endpoint; upload via POST /me/avatar.",
+      );
+    }
+
     const values = {
       displayName: normalize(body.displayName),
       bio: normalize(body.bio),
-      avatarUrl: normalize(body.avatarUrl),
+      avatarUrl: nextAvatarUrl,
     };
+
+    const previous =
+      body.avatarUrl !== undefined ? await loadProfile(userId) : null;
 
     await db
       .insert(userProfilesTable)
@@ -102,6 +114,14 @@ router.patch(
         target: userProfilesTable.userId,
         set: { ...values, updatedAt: new Date() },
       });
+
+    if (
+      body.avatarUrl !== undefined &&
+      previous?.avatarUrl &&
+      previous.avatarUrl !== nextAvatarUrl
+    ) {
+      await deleteObjectByUrl(previous.avatarUrl);
+    }
 
     res.json(await buildMeResponse(userId));
   }),

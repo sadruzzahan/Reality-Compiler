@@ -160,8 +160,8 @@ export async function streamObject(key: string, res: Response): Promise<void> {
   const file = fileForKey(key);
   const [exists] = await file.exists();
   if (!exists) {
-    res.status(404).json({ error: "Not found" });
-    return;
+    const { notFound } = await import("./errors");
+    throw notFound("Object");
   }
   const [metadata] = await file.getMetadata();
   res.setHeader(
