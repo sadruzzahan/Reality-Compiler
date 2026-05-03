@@ -44,7 +44,8 @@ Every request emits **one structured line** when the response finishes:
   "time": 1714694400000,
   "req": { "id": "f7b1...", "method": "GET", "url": "/api/sessions" },
   "res": { "statusCode": 200 },
-  "responseTime": 42,
+  "duration": 42,
+  "requestId": "f7b1...",
   "userId": "user_2abc...",
   "msg": "GET /api/sessions 200 42ms"
 }
