@@ -1,6 +1,6 @@
 {
-  "id": "9236224a-7840-46a3-8e35-7e6fc89ee691",
-  "prevId": "d8efa97b-8b1f-4bfd-a260-6a2941a8769f",
+  "id": "1c28b33e-d259-49d7-bf88-9b9b63e4a9e9",
+  "prevId": "9236224a-7840-46a3-8e35-7e6fc89ee691",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1114,6 +1114,51 @@
           "isUnique": false,
           "concurrently": false,
           "method": "btree",
+          "with": {}
+        },
+        "marketplace_listings_listing_price_idx": {
+          "name": "marketplace_listings_listing_price_idx",
+          "columns": [
+            {
+              "expression": "listing_price",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "marketplace_listings_search_idx": {
+          "name": "marketplace_listings_search_idx",
+          "columns": [
+            {
+              "expression": "\"search_vector\"",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "marketplace_listings_title_trgm_idx": {
+          "name": "marketplace_listings_title_trgm_idx",
+          "columns": [
+            {
+              "expression": "\"title\" gin_trgm_ops",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
           "with": {}
         }
       },

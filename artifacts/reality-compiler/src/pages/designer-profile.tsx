@@ -38,6 +38,9 @@ export default function DesignerProfile() {
   const {
     data: pages,
     isLoading: isListingsLoading,
+    isError: isListingsError,
+    error: listingsError,
+    refetch: refetchListings,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -191,7 +194,29 @@ export default function DesignerProfile() {
           </h2>
         </div>
 
-        {isListingsLoading ? (
+        {isListingsError ? (
+          <Card>
+            <CardContent
+              className="py-12 text-center"
+              data-testid="state-designer-listings-error"
+            >
+              <p className="text-sm text-destructive font-mono mb-3">
+                Couldn't load this designer's listings.
+              </p>
+              <p className="text-xs text-muted-foreground mb-6">
+                {listingsError?.message ?? "Network error"}
+              </p>
+              <button
+                type="button"
+                onClick={() => void refetchListings()}
+                className="font-mono text-xs underline hover:text-foreground text-muted-foreground"
+                data-testid="button-retry-designer-listings"
+              >
+                Try again
+              </button>
+            </CardContent>
+          </Card>
+        ) : isListingsLoading ? (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="h-72 rounded-xl" />
