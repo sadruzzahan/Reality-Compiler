@@ -1,6 +1,15 @@
+import { useEffect, useMemo, useRef } from "react";
 import { Link, useParams } from "wouter";
-import { User, Package, TrendingUp, Store } from "lucide-react";
-import { useGetDesignerProfile } from "@workspace/api-client-react";
+import { User, Package, TrendingUp, Store, Loader2 } from "lucide-react";
+import {
+  useGetDesignerProfile,
+  listMarketplaceListings,
+  getListMarketplaceListingsQueryKey,
+  type ListMarketplaceListingsParams,
+  type MarketplaceListingsPage,
+  type MarketplaceListingSummary,
+} from "@workspace/api-client-react";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import {
   Card,
   CardContent,
@@ -12,10 +21,67 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDocumentHead } from "@/hooks/use-document-head";
 
+const PAGE_SIZE = 24;
+
 export default function DesignerProfile() {
   const params = useParams();
   const userId = params.userId!;
   const { data, isLoading } = useGetDesignerProfile(userId);
+
+  // Listings come from the same paginated endpoint as the marketplace
+  // grid, scoped to this creator. This means infinite scroll, ordering,
+  // and image hydration logic stay in one place.
+  const baseParams: ListMarketplaceListingsParams = useMemo(
+    () => ({ creator: userId, sort: "recent", limit: PAGE_SIZE }),
+    [userId],
+  );
+  const {
+    data: pages,
+    isLoading: isListingsLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery<
+    MarketplaceListingsPage,
+    Error,
+    { pages: MarketplaceListingsPage[]; pageParams: (string | undefined)[] },
+    readonly unknown[],
+    string | undefined
+  >({
+    queryKey: getListMarketplaceListingsQueryKey(baseParams),
+    queryFn: ({ pageParam, signal }) =>
+      listMarketplaceListings(
+        { ...baseParams, ...(pageParam ? { cursor: pageParam } : {}) },
+        { signal },
+      ),
+    initialPageParam: undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
+
+  const listings: MarketplaceListingSummary[] = useMemo(
+    () => pages?.pages.flatMap((p) => p.items) ?? [],
+    [pages],
+  );
+
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (
+          entries[0]?.isIntersecting &&
+          hasNextPage &&
+          !isFetchingNextPage
+        ) {
+          void fetchNextPage();
+        }
+      },
+      { rootMargin: "400px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   useDocumentHead(
     data
@@ -125,61 +191,84 @@ export default function DesignerProfile() {
           </h2>
         </div>
 
-        {data.listings.length === 0 ? (
+        {isListingsLoading ? (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-72 rounded-xl" />
+            ))}
+          </div>
+        ) : listings.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center text-muted-foreground">
               No published designs yet.
             </CardContent>
           </Card>
         ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {data.listings.map((l) => (
-              <Link key={l.id} href={`/marketplace/${l.id}`}>
-                <Card
-                  className="h-full hover-elevate cursor-pointer"
-                  data-testid={`card-designer-listing-${l.id}`}
-                >
-                  <div className="aspect-square bg-gradient-to-br from-primary/10 to-accent/10 rounded-t-xl flex items-center justify-center">
-                    {l.thumbnailUrl ? (
-                      <img
-                        src={l.thumbnailUrl}
-                        alt={l.title}
-                        className="w-full h-full object-cover rounded-t-xl"
-                      />
-                    ) : (
-                      <Package className="w-14 h-14 text-primary/40" />
-                    )}
-                  </div>
-                  <CardHeader className="pb-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <CardTitle className="text-base font-sans line-clamp-1">
-                        {l.title}
-                      </CardTitle>
-                      <Badge variant="outline" className="font-mono text-xs shrink-0">
-                        {l.category}
-                      </Badge>
+          <>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {listings.map((l) => (
+                <Link key={l.id} href={`/marketplace/${l.id}`}>
+                  <Card
+                    className="h-full hover-elevate cursor-pointer"
+                    data-testid={`card-designer-listing-${l.id}`}
+                  >
+                    <div className="aspect-square bg-gradient-to-br from-primary/10 to-accent/10 rounded-t-xl flex items-center justify-center">
+                      {l.thumbnailUrl ? (
+                        <img
+                          src={l.thumbnailUrl}
+                          alt={l.title}
+                          loading="lazy"
+                          className="w-full h-full object-cover rounded-t-xl"
+                        />
+                      ) : (
+                        <Package className="w-14 h-14 text-primary/40" />
+                      )}
                     </div>
-                    <CardDescription className="line-clamp-2 text-xs">
-                      {l.description}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex items-center justify-between">
-                    {l.orderCount > 0 ? (
-                      <span className="text-xs text-emerald-400 flex items-center gap-1 font-mono">
-                        <TrendingUp className="w-3 h-3" />
-                        {l.orderCount}
+                    <CardHeader className="pb-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <CardTitle className="text-base font-sans line-clamp-1">
+                          {l.title}
+                        </CardTitle>
+                        <Badge
+                          variant="outline"
+                          className="font-mono text-xs shrink-0"
+                        >
+                          {l.category}
+                        </Badge>
+                      </div>
+                      <CardDescription className="line-clamp-2 text-xs">
+                        {l.description}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex items-center justify-between">
+                      {l.orderCount > 0 ? (
+                        <span className="text-xs text-emerald-400 flex items-center gap-1 font-mono">
+                          <TrendingUp className="w-3 h-3" />
+                          {l.orderCount}
+                        </span>
+                      ) : (
+                        <span />
+                      )}
+                      <span className="font-mono font-bold">
+                        ${l.listingPrice.toLocaleString()}
                       </span>
-                    ) : (
-                      <span />
-                    )}
-                    <span className="font-mono font-bold">
-                      ${l.listingPrice.toLocaleString()}
-                    </span>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+            <div
+              ref={sentinelRef}
+              className="h-12 mt-6 flex items-center justify-center"
+            >
+              {isFetchingNextPage ? (
+                <span className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Loading more…
+                </span>
+              ) : null}
+            </div>
+          </>
         )}
       </div>
     </div>

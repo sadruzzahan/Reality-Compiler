@@ -11,7 +11,7 @@ export type ListMarketplaceListingsSort =
 
 export const ListMarketplaceListingsSort = {
   popular: "popular",
+  recent: "recent",
   "price-asc": "price-asc",
   "price-desc": "price-desc",
-  newest: "newest",
 } as const;

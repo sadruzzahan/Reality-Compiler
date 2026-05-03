@@ -5,8 +5,14 @@
  * Reality Compiler API
  * OpenAPI spec version: 0.1.0
  */
-import type { MarketplaceListingSummary } from "./marketplaceListingSummary";
 
+/**
+ * Public designer-page header. Listings are NOT inlined here — the
+designer profile page calls `listMarketplaceListings` with
+`creator=<userId>` so it goes through the same paginated /
+filterable path as the marketplace itself.
+
+ */
 export interface DesignerProfile {
   userId: string;
   handle: string;
@@ -16,7 +22,6 @@ export interface DesignerProfile {
   bio?: string | null;
   /** @nullable */
   avatarUrl?: string | null;
-  listings: MarketplaceListingSummary[];
   totalListings: number;
   totalOrders: number;
   totalPayouts: number;

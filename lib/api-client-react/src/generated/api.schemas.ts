@@ -396,6 +396,13 @@ export interface MarketplaceListingDetail {
   updatedAt: string;
 }
 
+/**
+ * Public designer-page header. Listings are NOT inlined here — the
+designer profile page calls `listMarketplaceListings` with
+`creator=<userId>` so it goes through the same paginated /
+filterable path as the marketplace itself.
+
+ */
 export interface DesignerProfile {
   userId: string;
   handle: string;
@@ -405,10 +412,25 @@ export interface DesignerProfile {
   bio?: string | null;
   /** @nullable */
   avatarUrl?: string | null;
-  listings: MarketplaceListingSummary[];
   totalListings: number;
   totalOrders: number;
   totalPayouts: number;
+}
+
+export interface MarketplaceListingsPage {
+  items: MarketplaceListingSummary[];
+  /**
+   * Opaque cursor for the next page, or `null` when there are no
+more results. Pass this value back as the `cursor` query
+param to fetch the next page.
+
+   * @nullable
+   */
+  nextCursor: string | null;
+}
+
+export interface MarketplaceListingsCount {
+  total: number;
 }
 
 export type OrderStatusEventStatus =
@@ -626,8 +648,36 @@ export type ListSuppliersParams = {
 };
 
 export type ListMarketplaceListingsParams = {
+  /**
+   * @maxLength 200
+   */
+  q?: string;
+  /**
+   * @maxLength 64
+   */
   category?: string;
+  /**
+   * @minimum 0
+   */
+  minPrice?: number;
+  /**
+   * @minimum 0
+   */
+  maxPrice?: number;
+  /**
+   * @maxLength 128
+   */
+  creator?: string;
   sort?: ListMarketplaceListingsSort;
+  /**
+   * @maxLength 512
+   */
+  cursor?: string;
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: number;
 };
 
 export type ListMarketplaceListingsSort =
@@ -635,7 +685,30 @@ export type ListMarketplaceListingsSort =
 
 export const ListMarketplaceListingsSort = {
   popular: "popular",
+  recent: "recent",
   "price-asc": "price-asc",
   "price-desc": "price-desc",
-  newest: "newest",
 } as const;
+
+export type CountMarketplaceListingsParams = {
+  /**
+   * @maxLength 200
+   */
+  q?: string;
+  /**
+   * @maxLength 64
+   */
+  category?: string;
+  /**
+   * @minimum 0
+   */
+  minPrice?: number;
+  /**
+   * @minimum 0
+   */
+  maxPrice?: number;
+  /**
+   * @maxLength 128
+   */
+  creator?: string;
+};

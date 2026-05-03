@@ -928,33 +928,88 @@ export const UpdateMyProfileResponse = zod.object({
 });
 
 /**
- * @summary List published marketplace designs
+ * Filtered, sorted, cursor-paginated list of active marketplace
+listings. `q` searches the title (weighted) and description via a
+Postgres `tsvector` index, with a `pg_trgm` fallback so short or
+misspelt queries still match. `creator` accepts either a user id
+or a handle (without the leading `@`). The opaque `cursor` is
+what the previous page returned in `nextCursor`; pass it back to
+get the next page. `limit` is capped at 50.
+
+ * @summary Search and page through published marketplace designs
  */
+export const listMarketplaceListingsQueryQMax = 200;
+
+export const listMarketplaceListingsQueryCategoryMax = 64;
+
+export const listMarketplaceListingsQueryMinPriceMin = 0;
+
+export const listMarketplaceListingsQueryMaxPriceMin = 0;
+
+export const listMarketplaceListingsQueryCreatorMax = 128;
+
+export const listMarketplaceListingsQueryCursorMax = 512;
+
+export const listMarketplaceListingsQueryLimitDefault = 24;
+export const listMarketplaceListingsQueryLimitMax = 50;
+
 export const ListMarketplaceListingsQueryParams = zod.object({
-  category: zod.coerce.string().optional(),
-  sort: zod.enum(["popular", "price-asc", "price-desc", "newest"]).optional(),
+  q: zod.coerce.string().max(listMarketplaceListingsQueryQMax).optional(),
+  category: zod.coerce
+    .string()
+    .max(listMarketplaceListingsQueryCategoryMax)
+    .optional(),
+  minPrice: zod.coerce
+    .number()
+    .min(listMarketplaceListingsQueryMinPriceMin)
+    .optional(),
+  maxPrice: zod.coerce
+    .number()
+    .min(listMarketplaceListingsQueryMaxPriceMin)
+    .optional(),
+  creator: zod.coerce
+    .string()
+    .max(listMarketplaceListingsQueryCreatorMax)
+    .optional(),
+  sort: zod.enum(["popular", "recent", "price-asc", "price-desc"]).optional(),
+  cursor: zod.coerce
+    .string()
+    .max(listMarketplaceListingsQueryCursorMax)
+    .optional(),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(listMarketplaceListingsQueryLimitMax)
+    .default(listMarketplaceListingsQueryLimitDefault),
 });
 
-export const ListMarketplaceListingsResponseItem = zod.object({
-  id: zod.number(),
-  sessionId: zod.number(),
-  userId: zod.string(),
-  creatorHandle: zod.string(),
-  creatorDisplayName: zod.string().nullish(),
-  creatorAvatarUrl: zod.string().nullish(),
-  title: zod.string(),
-  category: zod.string(),
-  description: zod.string(),
-  listingPrice: zod.number(),
-  thumbnailUrl: zod.string().nullish(),
-  primaryMaterial: zod.string().nullish(),
-  productName: zod.string().nullish(),
-  orderCount: zod.number(),
-  createdAt: zod.coerce.date(),
+export const ListMarketplaceListingsResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.number(),
+      sessionId: zod.number(),
+      userId: zod.string(),
+      creatorHandle: zod.string(),
+      creatorDisplayName: zod.string().nullish(),
+      creatorAvatarUrl: zod.string().nullish(),
+      title: zod.string(),
+      category: zod.string(),
+      description: zod.string(),
+      listingPrice: zod.number(),
+      thumbnailUrl: zod.string().nullish(),
+      primaryMaterial: zod.string().nullish(),
+      productName: zod.string().nullish(),
+      orderCount: zod.number(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  nextCursor: zod
+    .string()
+    .nullable()
+    .describe(
+      "Opaque cursor for the next page, or `null` when there are no\nmore results. Pass this value back as the `cursor` query\nparam to fetch the next page.\n",
+    ),
 });
-export const ListMarketplaceListingsResponse = zod.array(
-  ListMarketplaceListingsResponseItem,
-);
 
 /**
  * @summary Publish a session as a marketplace listing
@@ -965,6 +1020,48 @@ export const PublishListingBody = zod.object({
   category: zod.string(),
   description: zod.string(),
   listingPrice: zod.number(),
+});
+
+/**
+ * Returns the total number of listings that match the given
+filters. Separate from the paginated list so the cheap path can
+skip the count entirely; only call this when you actually need
+a total (e.g. "Showing X of Y results").
+
+ * @summary Count listings matching the same filters as listMarketplaceListings
+ */
+export const countMarketplaceListingsQueryQMax = 200;
+
+export const countMarketplaceListingsQueryCategoryMax = 64;
+
+export const countMarketplaceListingsQueryMinPriceMin = 0;
+
+export const countMarketplaceListingsQueryMaxPriceMin = 0;
+
+export const countMarketplaceListingsQueryCreatorMax = 128;
+
+export const CountMarketplaceListingsQueryParams = zod.object({
+  q: zod.coerce.string().max(countMarketplaceListingsQueryQMax).optional(),
+  category: zod.coerce
+    .string()
+    .max(countMarketplaceListingsQueryCategoryMax)
+    .optional(),
+  minPrice: zod.coerce
+    .number()
+    .min(countMarketplaceListingsQueryMinPriceMin)
+    .optional(),
+  maxPrice: zod.coerce
+    .number()
+    .min(countMarketplaceListingsQueryMaxPriceMin)
+    .optional(),
+  creator: zod.coerce
+    .string()
+    .max(countMarketplaceListingsQueryCreatorMax)
+    .optional(),
+});
+
+export const CountMarketplaceListingsResponse = zod.object({
+  total: zod.number(),
 });
 
 /**
@@ -1081,32 +1178,17 @@ export const GetDesignerProfileParams = zod.object({
   userId: zod.coerce.string(),
 });
 
-export const GetDesignerProfileResponse = zod.object({
-  userId: zod.string(),
-  handle: zod.string(),
-  displayName: zod.string().nullish(),
-  bio: zod.string().nullish(),
-  avatarUrl: zod.string().nullish(),
-  listings: zod.array(
-    zod.object({
-      id: zod.number(),
-      sessionId: zod.number(),
-      userId: zod.string(),
-      creatorHandle: zod.string(),
-      creatorDisplayName: zod.string().nullish(),
-      creatorAvatarUrl: zod.string().nullish(),
-      title: zod.string(),
-      category: zod.string(),
-      description: zod.string(),
-      listingPrice: zod.number(),
-      thumbnailUrl: zod.string().nullish(),
-      primaryMaterial: zod.string().nullish(),
-      productName: zod.string().nullish(),
-      orderCount: zod.number(),
-      createdAt: zod.coerce.date(),
-    }),
-  ),
-  totalListings: zod.number(),
-  totalOrders: zod.number(),
-  totalPayouts: zod.number(),
-});
+export const GetDesignerProfileResponse = zod
+  .object({
+    userId: zod.string(),
+    handle: zod.string(),
+    displayName: zod.string().nullish(),
+    bio: zod.string().nullish(),
+    avatarUrl: zod.string().nullish(),
+    totalListings: zod.number(),
+    totalOrders: zod.number(),
+    totalPayouts: zod.number(),
+  })
+  .describe(
+    "Public designer-page header. Listings are NOT inlined here — the\ndesigner profile page calls `listMarketplaceListings` with\n`creator=<userId>` so it goes through the same paginated \/\nfilterable path as the marketplace itself.\n",
+  );

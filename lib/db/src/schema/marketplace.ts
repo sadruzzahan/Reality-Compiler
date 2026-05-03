@@ -7,6 +7,7 @@ import {
   numeric,
   index,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { designSessionsTable } from "./designSessions";
 
 export const marketplaceListingsTable = pgTable(
@@ -39,6 +40,18 @@ export const marketplaceListingsTable = pgTable(
     index("marketplace_listings_category_idx").on(t.category),
     index("marketplace_listings_deleted_at_idx").on(t.deletedAt),
     index("marketplace_listings_created_at_idx").on(t.createdAt),
+    // Keyset pagination indexes used by the marketplace search query.
+    index("marketplace_listings_listing_price_idx").on(t.listingPrice),
+    // Search support: tsvector generated column + GIN index, plus a
+    // pg_trgm index on title for typo-tolerant short-query matching.
+    // The actual generated column / extension creation is in migration
+    // 0004 because Drizzle's pgTable doesn't model GENERATED ALWAYS AS
+    // tsvector columns; these index annotations exist primarily so
+    // future readers know the columns are intentionally there.
+    index("marketplace_listings_search_idx")
+      .using("gin", sql`"search_vector"`),
+    index("marketplace_listings_title_trgm_idx")
+      .using("gin", sql`"title" gin_trgm_ops`),
   ],
 );
 

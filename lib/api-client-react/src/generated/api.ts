@@ -22,6 +22,7 @@ import type {
   ConnectStatus,
   ContactAck,
   ContactInput,
+  CountMarketplaceListingsParams,
   CreateSessionInput,
   DesignMessage,
   DesignSession,
@@ -33,7 +34,8 @@ import type {
   ListMarketplaceListingsParams,
   ListSuppliersParams,
   MarketplaceListingDetail,
-  MarketplaceListingSummary,
+  MarketplaceListingsCount,
+  MarketplaceListingsPage,
   Me,
   Order,
   OrderRefundInput,
@@ -2411,7 +2413,15 @@ export const useUpdateMyProfile = <
 };
 
 /**
- * @summary List published marketplace designs
+ * Filtered, sorted, cursor-paginated list of active marketplace
+listings. `q` searches the title (weighted) and description via a
+Postgres `tsvector` index, with a `pg_trgm` fallback so short or
+misspelt queries still match. `creator` accepts either a user id
+or a handle (without the leading `@`). The opaque `cursor` is
+what the previous page returned in `nextCursor`; pass it back to
+get the next page. `limit` is capped at 50.
+
+ * @summary Search and page through published marketplace designs
  */
 export const getListMarketplaceListingsUrl = (
   params?: ListMarketplaceListingsParams,
@@ -2434,8 +2444,8 @@ export const getListMarketplaceListingsUrl = (
 export const listMarketplaceListings = async (
   params?: ListMarketplaceListingsParams,
   options?: RequestInit,
-): Promise<MarketplaceListingSummary[]> => {
-  return customFetch<MarketplaceListingSummary[]>(
+): Promise<MarketplaceListingsPage> => {
+  return customFetch<MarketplaceListingsPage>(
     getListMarketplaceListingsUrl(params),
     {
       ...options,
@@ -2452,7 +2462,7 @@ export const getListMarketplaceListingsQueryKey = (
 
 export const getListMarketplaceListingsQueryOptions = <
   TData = Awaited<ReturnType<typeof listMarketplaceListings>>,
-  TError = ErrorType<unknown>,
+  TError = ErrorType<ErrorResponse>,
 >(
   params?: ListMarketplaceListingsParams,
   options?: {
@@ -2484,15 +2494,15 @@ export const getListMarketplaceListingsQueryOptions = <
 export type ListMarketplaceListingsQueryResult = NonNullable<
   Awaited<ReturnType<typeof listMarketplaceListings>>
 >;
-export type ListMarketplaceListingsQueryError = ErrorType<unknown>;
+export type ListMarketplaceListingsQueryError = ErrorType<ErrorResponse>;
 
 /**
- * @summary List published marketplace designs
+ * @summary Search and page through published marketplace designs
  */
 
 export function useListMarketplaceListings<
   TData = Awaited<ReturnType<typeof listMarketplaceListings>>,
-  TError = ErrorType<unknown>,
+  TError = ErrorType<ErrorResponse>,
 >(
   params?: ListMarketplaceListingsParams,
   options?: {
@@ -2598,6 +2608,117 @@ export const usePublishListing = <
 > => {
   return useMutation(getPublishListingMutationOptions(options));
 };
+
+/**
+ * Returns the total number of listings that match the given
+filters. Separate from the paginated list so the cheap path can
+skip the count entirely; only call this when you actually need
+a total (e.g. "Showing X of Y results").
+
+ * @summary Count listings matching the same filters as listMarketplaceListings
+ */
+export const getCountMarketplaceListingsUrl = (
+  params?: CountMarketplaceListingsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/marketplace/listings/count?${stringifiedParams}`
+    : `/api/marketplace/listings/count`;
+};
+
+export const countMarketplaceListings = async (
+  params?: CountMarketplaceListingsParams,
+  options?: RequestInit,
+): Promise<MarketplaceListingsCount> => {
+  return customFetch<MarketplaceListingsCount>(
+    getCountMarketplaceListingsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getCountMarketplaceListingsQueryKey = (
+  params?: CountMarketplaceListingsParams,
+) => {
+  return [
+    `/api/marketplace/listings/count`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getCountMarketplaceListingsQueryOptions = <
+  TData = Awaited<ReturnType<typeof countMarketplaceListings>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params?: CountMarketplaceListingsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof countMarketplaceListings>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getCountMarketplaceListingsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof countMarketplaceListings>>
+  > = ({ signal }) =>
+    countMarketplaceListings(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof countMarketplaceListings>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type CountMarketplaceListingsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof countMarketplaceListings>>
+>;
+export type CountMarketplaceListingsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Count listings matching the same filters as listMarketplaceListings
+ */
+
+export function useCountMarketplaceListings<
+  TData = Awaited<ReturnType<typeof countMarketplaceListings>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params?: CountMarketplaceListingsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof countMarketplaceListings>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getCountMarketplaceListingsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get a marketplace listing detail with embedded design output

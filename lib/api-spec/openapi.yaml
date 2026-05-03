@@ -749,28 +749,67 @@ paths:
     get:
       operationId: listMarketplaceListings
       tags: [marketplace]
-      summary: List published marketplace designs
+      summary: Search and page through published marketplace designs
+      description: |
+        Filtered, sorted, cursor-paginated list of active marketplace
+        listings. `q` searches the title (weighted) and description via a
+        Postgres `tsvector` index, with a `pg_trgm` fallback so short or
+        misspelt queries still match. `creator` accepts either a user id
+        or a handle (without the leading `@`). The opaque `cursor` is
+        what the previous page returned in `nextCursor`; pass it back to
+        get the next page. `limit` is capped at 50.
       parameters:
+        - in: query
+          name: q
+          required: false
+          schema: { type: string, maxLength: 200 }
         - in: query
           name: category
           required: false
-          schema:
-            type: string
+          schema: { type: string, maxLength: 64 }
+        - in: query
+          name: minPrice
+          required: false
+          schema: { type: number, minimum: 0 }
+        - in: query
+          name: maxPrice
+          required: false
+          schema: { type: number, minimum: 0 }
+        - in: query
+          name: creator
+          required: false
+          schema: { type: string, maxLength: 128 }
         - in: query
           name: sort
           required: false
           schema:
             type: string
-            enum: [popular, price-asc, price-desc, newest]
+            enum: [popular, recent, price-asc, price-desc]
+        - in: query
+          name: cursor
+          required: false
+          schema: { type: string, maxLength: 512 }
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 24
       responses:
         "200":
-          description: Listings
+          description: Page of listings
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/MarketplaceListingSummary"
+                $ref: "#/components/schemas/MarketplaceListingsPage"
+        "400":
+          description: Invalid filter or cursor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     post:
       operationId: publishListing
       tags: [marketplace]
@@ -802,6 +841,51 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "403":
           description: Not session owner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /marketplace/listings/count:
+    get:
+      operationId: countMarketplaceListings
+      tags: [marketplace]
+      summary: Count listings matching the same filters as listMarketplaceListings
+      description: |
+        Returns the total number of listings that match the given
+        filters. Separate from the paginated list so the cheap path can
+        skip the count entirely; only call this when you actually need
+        a total (e.g. "Showing X of Y results").
+      parameters:
+        - in: query
+          name: q
+          required: false
+          schema: { type: string, maxLength: 200 }
+        - in: query
+          name: category
+          required: false
+          schema: { type: string, maxLength: 64 }
+        - in: query
+          name: minPrice
+          required: false
+          schema: { type: number, minimum: 0 }
+        - in: query
+          name: maxPrice
+          required: false
+          schema: { type: number, minimum: 0 }
+        - in: query
+          name: creator
+          required: false
+          schema: { type: string, maxLength: 128 }
+      responses:
+        "200":
+          description: Total count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceListingsCount"
+        "400":
+          description: Invalid filter
           content:
             application/json:
               schema:
@@ -1583,6 +1667,11 @@ components:
 
     DesignerProfile:
       type: object
+      description: |
+        Public designer-page header. Listings are NOT inlined here — the
+        designer profile page calls `listMarketplaceListings` with
+        `creator=<userId>` so it goes through the same paginated /
+        filterable path as the marketplace itself.
       properties:
         userId:
           type: string
@@ -1594,10 +1683,6 @@ components:
           type: ["string", "null"]
         avatarUrl:
           type: ["string", "null"]
-        listings:
-          type: array
-          items:
-            $ref: "#/components/schemas/MarketplaceListingSummary"
         totalListings:
           type: integer
         totalOrders:
@@ -1607,10 +1692,34 @@ components:
       required:
         - userId
         - handle
-        - listings
         - totalListings
         - totalOrders
         - totalPayouts
+
+    MarketplaceListingsPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MarketplaceListingSummary"
+        nextCursor:
+          type: ["string", "null"]
+          description: |
+            Opaque cursor for the next page, or `null` when there are no
+            more results. Pass this value back as the `cursor` query
+            param to fetch the next page.
+      required:
+        - items
+        - nextCursor
+
+    MarketplaceListingsCount:
+      type: object
+      properties:
+        total:
+          type: integer
+      required:
+        - total
 
     OrderStatusEvent:
       type: object

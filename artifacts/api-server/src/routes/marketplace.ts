@@ -23,6 +23,7 @@ import {
   UnpublishListingParams,
   GetDesignerProfileParams,
   ListMarketplaceListingsQueryParams,
+  CountMarketplaceListingsQueryParams,
   PublishListingBody,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
@@ -123,49 +124,337 @@ function serializeOutput(out: typeof designOutputsTable.$inferSelect) {
   };
 }
 
+/**
+ * Cursor encoding. Cursors are base64url-encoded JSON of
+ * `{ s: sort, k: tuple }` so we can both detect a stale cursor (sort
+ * changed mid-scroll) and keep the encoded value small. We never trust
+ * the cursor — invalid cursors return 400.
+ */
+type SortKey = "popular" | "recent" | "price-asc" | "price-desc";
+
+interface CursorPayload {
+  s: SortKey;
+  /** Sort-specific tuple: e.g. [orderCount, id] for popular. */
+  k: (number | string)[];
+}
+
+function encodeCursor(p: CursorPayload): string {
+  return Buffer.from(JSON.stringify(p), "utf8").toString("base64url");
+}
+
+function decodeCursor(raw: string, expectedSort: SortKey): CursorPayload {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(raw, "base64url").toString("utf8"));
+  } catch {
+    throw badRequest("Invalid cursor.");
+  }
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    !Array.isArray((parsed as CursorPayload).k) ||
+    (parsed as CursorPayload).s !== expectedSort
+  ) {
+    // Sort flipped after the cursor was minted — caller should restart
+    // pagination from the top with no cursor.
+    throw badRequest(
+      "Cursor is incompatible with the current sort. Re-fetch from the start.",
+    );
+  }
+  // Per-sort tuple validation. Keep this aligned with how cursors are
+  // minted at the bottom of the listings handler — a malformed tuple
+  // would otherwise reach the SQL builder and produce a 500.
+  const k = (parsed as CursorPayload).k;
+  const isFiniteNum = (v: unknown): v is number =>
+    typeof v === "number" && Number.isFinite(v);
+  let ok = false;
+  switch (expectedSort) {
+    case "popular":
+      ok = k.length === 2 && isFiniteNum(k[0]) && isFiniteNum(k[1]);
+      break;
+    case "recent":
+      ok =
+        k.length === 2 &&
+        typeof k[0] === "string" &&
+        !Number.isNaN(Date.parse(k[0])) &&
+        isFiniteNum(k[1]);
+      break;
+    case "price-asc":
+    case "price-desc":
+      ok = k.length === 2 && isFiniteNum(k[0]) && isFiniteNum(k[1]);
+      break;
+  }
+  if (!ok) throw badRequest("Invalid cursor.");
+  return parsed as CursorPayload;
+}
+
+/**
+ * Resolve `creator` (which may be a Clerk userId, a handle, or @handle)
+ * to a concrete userId. Returns null when the creator string is set but
+ * doesn't match any known designer — the route then short-circuits to
+ * an empty page rather than ignoring the filter.
+ */
+async function resolveCreatorFilter(
+  creator: string | undefined,
+): Promise<string | null | undefined> {
+  if (!creator) return undefined;
+  const stripped = creator.startsWith("@") ? creator.slice(1) : creator;
+  // Already a Clerk-style userId? (`user_…`)
+  if (/^user_[A-Za-z0-9]+$/.test(stripped)) return stripped;
+  // Otherwise try matching as a creator_handle on a published listing.
+  const [row] = await db
+    .select({ userId: marketplaceListingsTable.userId })
+    .from(marketplaceListingsTable)
+    .where(eq(marketplaceListingsTable.creatorHandle, stripped))
+    .limit(1);
+  return row?.userId ?? null;
+}
+
+interface ListingFilters {
+  q: string | undefined;
+  category: string | undefined;
+  minPrice: number | undefined;
+  maxPrice: number | undefined;
+  creatorUserId: string | null | undefined;
+}
+
+function buildFilterClauses(filters: ListingFilters): {
+  whereSql: ReturnType<typeof sql>;
+  hasQuery: boolean;
+} {
+  const parts: ReturnType<typeof sql>[] = [
+    sql`l.status = 'active' AND l.deleted_at IS NULL`,
+  ];
+  if (filters.category) {
+    parts.push(sql`l.category = ${filters.category}`);
+  }
+  if (filters.minPrice != null) {
+    parts.push(sql`l.listing_price >= ${String(filters.minPrice)}`);
+  }
+  if (filters.maxPrice != null) {
+    parts.push(sql`l.listing_price <= ${String(filters.maxPrice)}`);
+  }
+  if (filters.creatorUserId) {
+    parts.push(sql`l.user_id = ${filters.creatorUserId}`);
+  }
+  let hasQuery = false;
+  if (filters.q && filters.q.trim().length > 0) {
+    hasQuery = true;
+    const q = filters.q.trim();
+    // Combine FTS (long, well-formed queries) with a trigram similarity
+    // fallback (typo-tolerant for short queries). Either match makes the
+    // row eligible; ordering for `q` results is handled in the sort
+    // selection below.
+    parts.push(
+      sql`(
+        l.search_vector @@ websearch_to_tsquery('english', ${q})
+        OR l.title % ${q}
+        OR l.title ILIKE ${"%" + q + "%"}
+      )`,
+    );
+  }
+  return {
+    whereSql: sql.join(parts, sql` AND `),
+    hasQuery,
+  };
+}
+
+type ListingRow = {
+  id: number;
+  session_id: number;
+  user_id: string;
+  creator_handle: string;
+  title: string;
+  category: string;
+  description: string;
+  listing_price: string;
+  // node-postgres returns timestamptz as a Date when the type parser is
+  // installed and as an ISO string otherwise; we accept both and
+  // normalise downstream.
+  created_at: Date | string;
+  order_count: number;
+  thumbnail_url: string | null;
+  primary_material: string | null;
+  product_name: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+} & Record<string, unknown>;
+
+function createdAtIso(v: Date | string): string {
+  return v instanceof Date ? v.toISOString() : new Date(v).toISOString();
+}
+
 router.get(
   "/marketplace/listings",
   asyncHandler(async (req, res) => {
     const params = parseOrThrow(ListMarketplaceListingsQueryParams, req.query);
-    const { category, sort } = params;
+    const sort: SortKey = params.sort ?? "popular";
+    const limit = params.limit ?? 24;
 
-    const conds = [
-      eq(marketplaceListingsTable.status, "active"),
-      isNull(marketplaceListingsTable.deletedAt),
-    ];
-    if (category) conds.push(eq(marketplaceListingsTable.category, category));
+    const creatorUserId = await resolveCreatorFilter(params.creator);
+    if (params.creator && creatorUserId === null) {
+      // Creator filter was specified but no such designer exists —
+      // return an empty page deterministically rather than silently
+      // ignoring the filter.
+      res.json({ items: [], nextCursor: null });
+      return;
+    }
 
-    const rows = await db
-      .select()
-      .from(marketplaceListingsTable)
-      .where(and(...conds));
+    const filters: ListingFilters = {
+      q: params.q,
+      category: params.category,
+      minPrice: params.minPrice,
+      maxPrice: params.maxPrice,
+      creatorUserId,
+    };
+    const { whereSql } = buildFilterClauses(filters);
 
-    const profileMap = await loadProfilesByUserIds(rows.map((r) => r.userId));
-    const summaries = await Promise.all(
-      rows.map((r) => buildSummary(r, profileMap.get(r.userId) ?? null)),
-    );
+    // Cursor predicate (keyset). Always tie-break on id so the page is
+    // deterministic across rows that share the primary sort value.
+    let cursorPred = sql`TRUE`;
+    if (params.cursor) {
+      const cur = decodeCursor(params.cursor, sort);
+      switch (sort) {
+        case "popular": {
+          const [oc, id] = cur.k as [number, number];
+          cursorPred = sql`(coalesce(oc.order_count, 0), l.id) < (${oc}, ${id})`;
+          break;
+        }
+        case "recent": {
+          const [created, id] = cur.k as [string, number];
+          cursorPred = sql`(l.created_at, l.id) < (${new Date(created)}, ${id})`;
+          break;
+        }
+        case "price-asc": {
+          const [price, id] = cur.k as [number, number];
+          cursorPred = sql`(l.listing_price, l.id) > (${String(price)}, ${id})`;
+          break;
+        }
+        case "price-desc": {
+          const [price, id] = cur.k as [number, number];
+          cursorPred = sql`(l.listing_price, l.id) < (${String(price)}, ${id})`;
+          break;
+        }
+      }
+    }
 
+    let orderBy: ReturnType<typeof sql>;
     switch (sort) {
+      case "popular":
+        orderBy = sql`coalesce(oc.order_count, 0) DESC, l.id DESC`;
+        break;
+      case "recent":
+        orderBy = sql`l.created_at DESC, l.id DESC`;
+        break;
       case "price-asc":
-        summaries.sort((a, b) => a.listingPrice - b.listingPrice);
+        orderBy = sql`l.listing_price ASC, l.id ASC`;
         break;
       case "price-desc":
-        summaries.sort((a, b) => b.listingPrice - a.listingPrice);
-        break;
-      case "newest":
-        summaries.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-        break;
-      case "popular":
-      default:
-        summaries.sort(
-          (a, b) =>
-            b.orderCount - a.orderCount ||
-            b.createdAt.localeCompare(a.createdAt),
-        );
+        orderBy = sql`l.listing_price DESC, l.id DESC`;
         break;
     }
 
-    res.json(summaries);
+    // Fetch limit+1 so we know whether a next page exists.
+    const fetchLimit = limit + 1;
+    const rows = await db.execute<ListingRow>(sql`
+      SELECT
+        l.id,
+        l.session_id,
+        l.user_id,
+        l.creator_handle,
+        l.title,
+        l.category,
+        l.description,
+        l.listing_price,
+        l.created_at,
+        coalesce(oc.order_count, 0)::int AS order_count,
+        o.image_url AS thumbnail_url,
+        o.primary_material,
+        o.product_name,
+        up.display_name,
+        up.avatar_url
+      FROM marketplace_listings l
+      LEFT JOIN LATERAL (
+        SELECT count(*)::int AS order_count
+        FROM orders ord
+        WHERE ord.marketplace_listing_id = l.id
+          AND ord.deleted_at IS NULL
+      ) oc ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT image_url, primary_material, product_name
+        FROM design_outputs
+        WHERE session_id = l.session_id
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) o ON TRUE
+      LEFT JOIN user_profiles up ON up.user_id = l.user_id
+      WHERE ${whereSql} AND ${cursorPred}
+      ORDER BY ${orderBy}
+      LIMIT ${fetchLimit}
+    `);
+
+    const allRows = (rows as unknown as { rows: ListingRow[] }).rows;
+    const hasMore = allRows.length > limit;
+    const page = hasMore ? allRows.slice(0, limit) : allRows;
+
+    let nextCursor: string | null = null;
+    if (hasMore && page.length > 0) {
+      const last = page[page.length - 1]!;
+      const tuple: (number | string)[] =
+        sort === "popular"
+          ? [last.order_count, last.id]
+          : sort === "recent"
+            ? [createdAtIso(last.created_at), last.id]
+            : [Number(last.listing_price), last.id];
+      nextCursor = encodeCursor({ s: sort, k: tuple });
+    }
+
+    const items = page.map((r) => ({
+      id: r.id,
+      sessionId: r.session_id,
+      userId: r.user_id,
+      creatorHandle: r.creator_handle,
+      creatorDisplayName: r.display_name,
+      creatorAvatarUrl: r.avatar_url,
+      title: r.title,
+      category: r.category,
+      description: r.description,
+      listingPrice: Number(r.listing_price),
+      thumbnailUrl: r.thumbnail_url,
+      primaryMaterial: r.primary_material,
+      productName: r.product_name,
+      orderCount: r.order_count,
+      createdAt: createdAtIso(r.created_at),
+    }));
+
+    res.json({ items, nextCursor });
+  }),
+);
+
+router.get(
+  "/marketplace/listings/count",
+  asyncHandler(async (req, res) => {
+    const params = parseOrThrow(CountMarketplaceListingsQueryParams, req.query);
+    const creatorUserId = await resolveCreatorFilter(params.creator);
+    if (params.creator && creatorUserId === null) {
+      res.json({ total: 0 });
+      return;
+    }
+    const { whereSql } = buildFilterClauses({
+      q: params.q,
+      category: params.category,
+      minPrice: params.minPrice,
+      maxPrice: params.maxPrice,
+      creatorUserId,
+    });
+    const result = await db.execute<{ total: number }>(sql`
+      SELECT count(*)::int AS total
+      FROM marketplace_listings l
+      WHERE ${whereSql}
+    `);
+    const total = (result as unknown as { rows: { total: number }[] }).rows[0]
+      ?.total ?? 0;
+    res.json({ total });
   }),
 );
 
@@ -481,8 +770,14 @@ router.get(
   asyncHandler(async (req, res) => {
     const params = parseOrThrow(GetDesignerProfileParams, req.params);
     const targetUserId = params.userId;
+    // Listings are NOT inlined here anymore — the designer page loads
+    // them via `listMarketplaceListings?creator=<userId>` so it shares
+    // the paginated/searchable code path with the marketplace.
     const listings = await db
-      .select()
+      .select({
+        id: marketplaceListingsTable.id,
+        creatorHandle: marketplaceListingsTable.creatorHandle,
+      })
       .from(marketplaceListingsTable)
       .where(
         and(
@@ -495,10 +790,17 @@ router.get(
 
     const profile =
       (await loadProfilesByUserIds([targetUserId])).get(targetUserId) ?? null;
-    const summaries = await Promise.all(
-      listings.map((l) => buildSummary(l, profile)),
-    );
-    const totalOrders = summaries.reduce((sum, s) => sum + s.orderCount, 0);
+    const [{ totalOrders }] = await db
+      .select({
+        totalOrders: sql<number>`coalesce(count(*), 0)::int`,
+      })
+      .from(ordersTable)
+      .where(
+        and(
+          eq(ordersTable.designerUserId, targetUserId),
+          isNull(ordersTable.deletedAt),
+        ),
+      );
     const [{ payouts: totalPayouts }] = await db
       .select({
         payouts: sql<string>`coalesce(sum(${ordersTable.payoutAmount}), 0)::text`,
@@ -519,9 +821,8 @@ router.get(
       displayName: profile?.displayName ?? null,
       bio: profile?.bio ?? null,
       avatarUrl: profile?.avatarUrl ?? null,
-      listings: summaries,
-      totalListings: summaries.length,
-      totalOrders,
+      totalListings: listings.length,
+      totalOrders: Number(totalOrders ?? 0),
       totalPayouts: Number(totalPayouts ?? 0),
     });
   }),

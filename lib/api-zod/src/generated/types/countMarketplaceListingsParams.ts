@@ -5,9 +5,8 @@
  * Reality Compiler API
  * OpenAPI spec version: 0.1.0
  */
-import type { ListMarketplaceListingsSort } from "./listMarketplaceListingsSort";
 
-export type ListMarketplaceListingsParams = {
+export type CountMarketplaceListingsParams = {
   /**
    * @maxLength 200
    */
@@ -28,14 +27,4 @@ export type ListMarketplaceListingsParams = {
    * @maxLength 128
    */
   creator?: string;
-  sort?: ListMarketplaceListingsSort;
-  /**
-   * @maxLength 512
-   */
-  cursor?: string;
-  /**
-   * @minimum 1
-   * @maximum 50
-   */
-  limit?: number;
 };
