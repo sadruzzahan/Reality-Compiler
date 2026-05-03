@@ -19,6 +19,33 @@ router.get("/healthz", (_req, res) => {
   res.json(data);
 });
 
+async function probeAiIntegration(
+  log: { error: (...args: unknown[]) => void } | undefined,
+): Promise<"ok" | "error" | "missing"> {
+  const baseUrl = process.env["AI_INTEGRATIONS_OPENAI_BASE_URL"];
+  const apiKey = process.env["AI_INTEGRATIONS_OPENAI_API_KEY"];
+  if (!baseUrl || !apiKey) return "missing";
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 1500);
+  try {
+    // OpenAI-compatible providers expose /v1/models. We don't care about the
+    // body — only that the upstream is reachable and accepts our credentials.
+    const url = baseUrl.replace(/\/+$/, "") + "/models";
+    const r = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: controller.signal,
+    });
+    if (r.status >= 500) return "error";
+    return "ok";
+  } catch (err) {
+    (log ?? console).error({ err }, "Readyz AI probe failed");
+    return "error";
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 router.get(
   "/readyz",
   asyncHandler(async (req, res) => {
@@ -26,20 +53,28 @@ router.get(
     for (const key of REQUIRED_ENV) {
       checks[key] = process.env[key] ? "ok" : "missing";
     }
-    let dbStatus: "ok" | "error" = "ok";
-    try {
-      await db.execute(sql`select 1`);
-    } catch (err) {
-      dbStatus = "error";
-      // Log the underlying error server-side; never leak DB details to the
-      // public readiness endpoint.
-      (req.log ?? console).error({ err }, "Readyz DB check failed");
-    }
+    const [dbStatus, aiStatus] = await Promise.all([
+      (async () => {
+        try {
+          await db.execute(sql`select 1`);
+          return "ok" as const;
+        } catch (err) {
+          // Log the underlying error server-side; never leak DB details to
+          // the public readiness endpoint.
+          (req.log ?? console).error({ err }, "Readyz DB check failed");
+          return "error" as const;
+        }
+      })(),
+      probeAiIntegration(req.log),
+    ]);
     const ready =
-      dbStatus === "ok" && Object.values(checks).every((v) => v === "ok");
+      dbStatus === "ok" &&
+      aiStatus === "ok" &&
+      Object.values(checks).every((v) => v === "ok");
     res.status(ready ? 200 : 503).json({
       status: ready ? "ready" : "not_ready",
       database: dbStatus,
+      ai: aiStatus,
       env: checks,
     });
   }),

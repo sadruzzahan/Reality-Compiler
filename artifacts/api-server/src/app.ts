@@ -50,15 +50,32 @@ app.use(
 // request body upstream and would break if we consumed it first.
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 
-// Security headers. CSP and COEP are disabled because:
-//   - This server only emits JSON; the front-end is served by Vite/Replit
-//     which sets its own CSP.
-//   - COEP would block third-party resources we legitimately depend on.
+// Security headers. This server emits only JSON and never serves HTML, so we
+// apply a maximally restrictive CSP (`default-src 'none'`) — nothing should
+// ever be embedded, framed, scripted, or styled from an API response. The
+// front-end is served by Vite under a different artifact and ships its own
+// CSP tuned for Clerk and the OpenAI image hosts.
 app.use(
   helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        defaultSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'none'"],
+        formAction: ["'none'"],
+      },
+    },
+    // COEP would force every cross-origin response to opt in via CORP — too
+    // strict for a JSON API consumed by browsers from another origin.
     crossOriginEmbedderPolicy: false,
     crossOriginResourcePolicy: { policy: "cross-origin" },
+    referrerPolicy: { policy: "no-referrer" },
+    strictTransportSecurity: {
+      maxAge: 60 * 60 * 24 * 365,
+      includeSubDomains: true,
+      preload: true,
+    },
   }),
 );
 
