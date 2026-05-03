@@ -272,6 +272,7 @@ export interface MarketplaceListingDetail {
   listingPrice: number;
   orderCount: number;
   designOutput: DesignOutput;
+  quotes: Quote[];
   createdAt: string;
   updatedAt: string;
 }

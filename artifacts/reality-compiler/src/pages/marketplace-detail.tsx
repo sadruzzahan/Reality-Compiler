@@ -11,15 +11,12 @@ import {
   DollarSign,
   Clock,
 } from "lucide-react";
-import { Show, useAuth } from "@clerk/react";
+import { Show } from "@clerk/react";
 import {
   useGetMarketplaceListing,
-  useGenerateQuotes,
-  useListQuotes,
   usePlaceOrder,
   getGetMarketplaceListingQueryKey,
   getListOrdersQueryKey,
-  getListQuotesQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -51,13 +48,7 @@ export default function MarketplaceDetail() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { isSignedIn } = useAuth();
   const { data: listing, isLoading } = useGetMarketplaceListing(id);
-  const { data: quotes } = useListQuotes(listing?.sessionId ?? 0, {
-    query: { enabled: Boolean(listing) && Boolean(isSignedIn) },
-  });
-
-  const generateQuotes = useGenerateQuotes();
   const placeOrder = usePlaceOrder();
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -70,28 +61,9 @@ export default function MarketplaceDetail() {
   const [postalCode, setPostalCode] = useState("");
   const [country, setCountry] = useState("US");
 
-  const handleStartOrder = async () => {
+  const handleStartOrder = () => {
     if (!listing) return;
-    if (!quotes || quotes.length === 0) {
-      try {
-        const result = await generateQuotes.mutateAsync({
-          id: listing.sessionId,
-        });
-        queryClient.invalidateQueries({
-          queryKey: getListQuotesQueryKey(listing.sessionId),
-        });
-        setSelectedQuoteId(result[0]?.id ?? null);
-      } catch (e) {
-        toast({
-          title: "Couldn't get quotes",
-          description: e instanceof Error ? e.message : "Try again",
-          variant: "destructive",
-        });
-        return;
-      }
-    } else {
-      setSelectedQuoteId(quotes[0].id);
-    }
+    setSelectedQuoteId(listing.quotes[0]?.id ?? null);
     setDialogOpen(true);
   };
 
@@ -156,7 +128,9 @@ export default function MarketplaceDetail() {
   }
 
   const out = listing.designOutput;
-  const sortedQuotes = quotes ?? [];
+  const sortedQuotes = listing.quotes;
+  const creatorShare = Math.round(listing.listingPrice * 0.7 * 100) / 100;
+  const platformShare = Math.round(listing.listingPrice * 0.3 * 100) / 100;
 
   return (
     <div className="flex-1 overflow-auto bg-muted/10">
@@ -220,25 +194,37 @@ export default function MarketplaceDetail() {
                   / license, manufacturing extra
                 </span>
               </div>
+              <div
+                className="mt-3 grid grid-cols-2 gap-2 text-xs font-mono"
+                data-testid="revenue-split"
+              >
+                <div className="rounded-md border border-border/40 bg-muted/30 p-2">
+                  <div className="text-muted-foreground uppercase tracking-wider">
+                    Creator (70%)
+                  </div>
+                  <div className="font-bold text-foreground">
+                    ${creatorShare.toLocaleString()}
+                  </div>
+                </div>
+                <div className="rounded-md border border-border/40 bg-muted/30 p-2">
+                  <div className="text-muted-foreground uppercase tracking-wider">
+                    Platform (30%)
+                  </div>
+                  <div className="font-bold text-foreground">
+                    ${platformShare.toLocaleString()}
+                  </div>
+                </div>
+              </div>
               <Show when="signed-in">
                 <Button
                   size="lg"
                   className="w-full mt-4 font-mono"
                   onClick={handleStartOrder}
-                  disabled={generateQuotes.isPending}
+                  disabled={sortedQuotes.length === 0}
                   data-testid="button-order-design"
                 >
-                  {generateQuotes.isPending ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Getting quotes…
-                    </>
-                  ) : (
-                    <>
-                      <ShoppingCart className="w-4 h-4 mr-2" />
-                      Order this design
-                    </>
-                  )}
+                  <ShoppingCart className="w-4 h-4 mr-2" />
+                  Order this design
                 </Button>
               </Show>
               <Show when="signed-out">

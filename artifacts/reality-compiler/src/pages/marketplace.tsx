@@ -27,9 +27,28 @@ const SORTS = [
   { value: "price-desc", label: "Price: high to low" },
 ] as const;
 
+const CATEGORIES = [
+  "All categories",
+  "Consumer Electronics",
+  "Home Goods",
+  "Apparel & Wearables",
+  "Furniture",
+  "Kitchenware",
+  "Tools & Hardware",
+  "Sports & Outdoor",
+  "Toys & Games",
+  "Lighting",
+  "Personal Care",
+  "Other",
+] as const;
+
 export default function Marketplace() {
   const [sort, setSort] = useState<(typeof SORTS)[number]["value"]>("popular");
-  const { data: listings, isLoading } = useListMarketplaceListings({ sort });
+  const [category, setCategory] = useState<string>("All categories");
+  const { data: listings, isLoading } = useListMarketplaceListings({
+    sort,
+    ...(category !== "All categories" ? { category } : {}),
+  });
 
   return (
     <div className="flex-1 overflow-auto bg-muted/10">
@@ -51,7 +70,29 @@ export default function Marketplace() {
               attribution.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={category}
+              onValueChange={(v) => setCategory(v)}
+            >
+              <SelectTrigger
+                className="w-[200px] font-mono text-xs"
+                data-testid="select-category"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CATEGORIES.map((c) => (
+                  <SelectItem
+                    key={c}
+                    value={c}
+                    className="font-mono text-xs"
+                  >
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <ArrowUpDown className="w-4 h-4 text-muted-foreground" />
             <Select value={sort} onValueChange={(v) => setSort(v as typeof sort)}>
               <SelectTrigger

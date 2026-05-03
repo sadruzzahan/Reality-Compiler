@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DesignOutput } from "./designOutput";
+import type { Quote } from "./quote";
 
 export interface MarketplaceListingDetail {
   id: number;
@@ -18,6 +19,7 @@ export interface MarketplaceListingDetail {
   listingPrice: number;
   orderCount: number;
   designOutput: DesignOutput;
+  quotes: Quote[];
   createdAt: Date;
   updatedAt: Date;
 }

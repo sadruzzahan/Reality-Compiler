@@ -19,6 +19,27 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+const CATEGORIES = [
+  "Consumer Electronics",
+  "Home Goods",
+  "Apparel & Wearables",
+  "Furniture",
+  "Kitchenware",
+  "Tools & Hardware",
+  "Sports & Outdoor",
+  "Toys & Games",
+  "Lighting",
+  "Personal Care",
+  "Other",
+] as const;
 
 interface Props {
   sessionId: number;
@@ -105,11 +126,25 @@ export function PublishDialog({
             </div>
             <div>
               <Label className="font-mono text-xs uppercase">Category</Label>
-              <Input
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                data-testid="input-listing-category"
-              />
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger
+                  className="font-mono text-xs"
+                  data-testid="input-listing-category"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORIES.map((c) => (
+                    <SelectItem
+                      key={c}
+                      value={c}
+                      className="font-mono text-xs"
+                    >
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label className="font-mono text-xs uppercase">Description</Label>
@@ -132,6 +167,18 @@ export function PublishDialog({
                 onChange={(e) => setPrice(e.target.value)}
                 data-testid="input-listing-price"
               />
+              <p
+                className="text-xs text-muted-foreground font-mono mt-2"
+                data-testid="text-revenue-split"
+              >
+                Revenue split: <span className="text-foreground">70%</span> to
+                you · <span className="text-foreground">30%</span> platform
+                {Number(price) > 0
+                  ? ` · you earn $${(
+                      Math.round(Number(price) * 0.7 * 100) / 100
+                    ).toLocaleString()} per license`
+                  : ""}
+              </p>
             </div>
           </div>
           <DialogFooter>

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, asc, sql } from "drizzle-orm";
 import { clerkClient } from "@clerk/express";
 import {
   db,
@@ -7,8 +7,14 @@ import {
   designOutputsTable,
   marketplaceListingsTable,
   ordersTable,
+  quotesTable,
+  suppliersTable,
   type MarketplaceListing,
+  type Quote,
+  type Supplier,
 } from "@workspace/db";
+import { rankSuppliers } from "../lib/routing";
+import { serializeSupplier } from "./suppliers";
 import {
   GetMarketplaceListingParams,
   UnpublishListingParams,
@@ -124,6 +130,72 @@ router.get("/marketplace/listings", async (req, res): Promise<void> => {
   res.json(summaries);
 });
 
+type QuoteWithSupplier = Quote & { supplier: Supplier };
+
+function serializeQuote(q: QuoteWithSupplier) {
+  return {
+    id: q.id,
+    sessionId: q.sessionId,
+    supplier: serializeSupplier(q.supplier),
+    unitCost: Number(q.unitCost),
+    setupFee: Number(q.setupFee),
+    totalCost: Number(q.totalCost),
+    leadTimeDays: q.leadTimeDays,
+    processBreakdown: q.processBreakdown,
+    scoreFactors: q.scoreFactors,
+    rank: q.rank,
+    notes: q.notes,
+    createdAt: q.createdAt.toISOString(),
+  };
+}
+
+async function loadQuotesForSession(sessionId: number): Promise<QuoteWithSupplier[]> {
+  const rows = await db
+    .select({ quote: quotesTable, supplier: suppliersTable })
+    .from(quotesTable)
+    .innerJoin(suppliersTable, eq(suppliersTable.id, quotesTable.supplierId))
+    .where(eq(quotesTable.sessionId, sessionId))
+    .orderBy(asc(quotesTable.rank));
+  return rows.map((r) => ({ ...r.quote, supplier: r.supplier }));
+}
+
+async function ensureQuotesForListing(
+  sessionId: number,
+  output: typeof designOutputsTable.$inferSelect,
+): Promise<QuoteWithSupplier[]> {
+  const existing = await loadQuotesForSession(sessionId);
+  if (existing.length > 0) return existing;
+
+  const suppliers = await db.select().from(suppliersTable);
+  const ranked = rankSuppliers(
+    {
+      productName: output.productName,
+      processes: output.processes,
+      materials: output.materials,
+      bom: output.bom,
+      costEstimate: output.costEstimate,
+    },
+    suppliers,
+  );
+  if (ranked.length === 0) return [];
+
+  await db.insert(quotesTable).values(
+    ranked.map((r, idx) => ({
+      sessionId,
+      supplierId: r.supplier.id,
+      unitCost: String(r.unitCost),
+      setupFee: String(r.setupFee),
+      totalCost: String(r.totalCost),
+      leadTimeDays: r.leadTimeDays,
+      processBreakdown: r.processBreakdown,
+      scoreFactors: r.scoreFactors,
+      rank: idx + 1,
+      notes: r.notes,
+    })),
+  );
+  return loadQuotesForSession(sessionId);
+}
+
 router.get("/marketplace/listings/:id", async (req, res): Promise<void> => {
   const params = GetMarketplaceListingParams.safeParse(req.params);
   if (!params.success) {
@@ -152,6 +224,7 @@ router.get("/marketplace/listings/:id", async (req, res): Promise<void> => {
     .select({ c: sql<number>`count(*)::int` })
     .from(ordersTable)
     .where(eq(ordersTable.marketplaceListingId, listing.id));
+  const quotes = await ensureQuotesForListing(listing.sessionId, output);
   res.json({
     id: listing.id,
     sessionId: listing.sessionId,
@@ -163,6 +236,7 @@ router.get("/marketplace/listings/:id", async (req, res): Promise<void> => {
     listingPrice: Number(listing.listingPrice),
     orderCount: c ?? 0,
     designOutput: serializeOutput(output),
+    quotes: quotes.map(serializeQuote),
     createdAt: listing.createdAt.toISOString(),
     updatedAt: listing.updatedAt.toISOString(),
   });
@@ -251,6 +325,7 @@ router.post(
       .select({ c: sql<number>`count(*)::int` })
       .from(ordersTable)
       .where(eq(ordersTable.marketplaceListingId, listing.id));
+    const quotes = await ensureQuotesForListing(sessionId, output);
     res.status(201).json({
       id: listing.id,
       sessionId: listing.sessionId,
@@ -262,6 +337,7 @@ router.post(
       listingPrice: Number(listing.listingPrice),
       orderCount: c ?? 0,
       designOutput: serializeOutput(output),
+      quotes: quotes.map(serializeQuote),
       createdAt: listing.createdAt.toISOString(),
       updatedAt: listing.updatedAt.toISOString(),
     });

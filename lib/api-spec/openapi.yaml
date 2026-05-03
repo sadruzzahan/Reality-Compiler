@@ -1092,6 +1092,10 @@ components:
           type: integer
         designOutput:
           $ref: "#/components/schemas/DesignOutput"
+        quotes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Quote"
         createdAt:
           type: string
           format: date-time
@@ -1109,6 +1113,7 @@ components:
         - listingPrice
         - orderCount
         - designOutput
+        - quotes
         - createdAt
         - updatedAt
 

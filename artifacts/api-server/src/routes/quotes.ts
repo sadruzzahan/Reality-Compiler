@@ -24,13 +24,7 @@ async function userMayAccessSession(
     .from(designSessionsTable)
     .where(eq(designSessionsTable.id, sessionId));
   if (!s) return false;
-  if (s.userId === userId) return true;
-  const { marketplaceListingsTable } = await import("@workspace/db");
-  const [listing] = await db
-    .select({ id: marketplaceListingsTable.id })
-    .from(marketplaceListingsTable)
-    .where(eq(marketplaceListingsTable.sessionId, sessionId));
-  return Boolean(listing);
+  return s.userId === userId;
 }
 
 const router: IRouter = Router();

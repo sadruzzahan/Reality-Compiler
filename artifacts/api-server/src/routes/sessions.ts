@@ -5,7 +5,6 @@ import {
   designSessionsTable,
   designMessagesTable,
   designOutputsTable,
-  marketplaceListingsTable,
 } from "@workspace/db";
 import {
   CreateSessionBody,
@@ -32,12 +31,7 @@ async function userCanReadSession(
     .from(designSessionsTable)
     .where(eq(designSessionsTable.id, sessionId));
   if (!s) return false;
-  if (s.userId === userId) return true;
-  const [listing] = await db
-    .select({ id: marketplaceListingsTable.id })
-    .from(marketplaceListingsTable)
-    .where(eq(marketplaceListingsTable.sessionId, sessionId));
-  return Boolean(listing);
+  return s.userId === userId;
 }
 
 type Status = "generating" | "ready" | "error";

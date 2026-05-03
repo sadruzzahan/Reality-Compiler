@@ -189,7 +189,7 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
     authorized = Boolean(
       listing &&
         listing.sessionId === row.quote.sessionId &&
-        listing.status === "published",
+        listing.status === "active",
     );
   }
   if (!authorized) {
