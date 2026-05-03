@@ -23,11 +23,16 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { usePrivatePageHead } from "@/lib/seo-defaults";
 import { Separator } from "@/components/ui/separator";
 import { QuotesPanel } from "@/components/quotes-panel";
 import { PublishDialog } from "@/components/publish-dialog";
 
 export default function SessionWorkspace() {
+  usePrivatePageHead(
+    "Design session",
+    "Iterate on a design with the compiler in this private session.",
+  );
   const { id } = useParams();
   const sessionId = parseInt(id || "0", 10);
   const [, setLocation] = useLocation();

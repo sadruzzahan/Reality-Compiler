@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { useDocumentHead } from "@/hooks/use-document-head";
 
 export interface LegalSection {
   id: string;
@@ -11,9 +12,24 @@ interface LegalPageProps {
   intro?: ReactNode;
   lastUpdated: string;
   sections: LegalSection[];
+  /** Override the default `<meta name="description">`. */
+  description?: string;
 }
 
-export function LegalPage({ title, intro, lastUpdated, sections }: LegalPageProps) {
+export function LegalPage({
+  title,
+  intro,
+  lastUpdated,
+  sections,
+  description,
+}: LegalPageProps) {
+  useDocumentHead({
+    title,
+    description:
+      description ??
+      `${title} for Reality Compiler — last updated ${lastUpdated}.`,
+    ogType: "article",
+  });
   const [activeId, setActiveId] = useState<string>(sections[0]?.id ?? "");
 
   useEffect(() => {

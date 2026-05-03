@@ -10,11 +10,25 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useDocumentHead } from "@/hooks/use-document-head";
 
 export default function DesignerProfile() {
   const params = useParams();
   const userId = params.userId!;
   const { data, isLoading } = useGetDesignerProfile(userId);
+
+  useDocumentHead(
+    data
+      ? {
+          title: `${data.displayName ?? `@${data.handle}`} — designer on Reality Compiler`,
+          description:
+            data.bio?.slice(0, 200) ??
+            `${data.displayName ?? `@${data.handle}`} has published ${data.totalListings} design${data.totalListings === 1 ? "" : "s"} on Reality Compiler.`,
+          image: data.avatarUrl ?? undefined,
+          ogType: "profile",
+        }
+      : { title: "Designer profile", noIndex: true },
+  );
 
   if (isLoading) {
     return (

@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { usePublicPageHead } from "@/lib/seo-defaults";
 import {
   Select,
   SelectContent,
@@ -37,6 +38,10 @@ const CATEGORIES = [
 ] as const;
 
 export default function Marketplace() {
+  usePublicPageHead(
+    "Marketplace — AI-designed hardware, ready to ship",
+    "Browse hundreds of AI-designed physical products published by independent creators. Every listing comes with a bill of materials, a vetted manufacturer quote, and a one-click order flow.",
+  );
   const [sort, setSort] = useState<(typeof SORTS)[number]["value"]>("popular");
   const [category, setCategory] = useState<string>("All categories");
   const { data: listings, isLoading } = useListMarketplaceListings({

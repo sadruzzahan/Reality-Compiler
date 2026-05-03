@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { usePublicPageHead } from "@/lib/seo-defaults";
 
 const CAPABILITY_BUCKETS: { label: string; value: string | null }[] = [
   { label: "All", value: null },
@@ -29,6 +30,11 @@ function capacityVariant(level: Supplier["capacityLevel"]) {
 }
 
 export default function Suppliers() {
+  usePublicPageHead(
+    "Vetted suppliers — manufacturing partners on Reality Compiler",
+    "Browse the contract manufacturers we've vetted for marketplace orders. Filter by capability (CNC, injection molding, sheet metal, electronics, soft goods) and lead time.",
+  );
+
   const [capability, setCapability] = useState<string | null>(null);
   const { data: suppliers, isLoading } = useListSuppliers(
     capability ? { capability } : {},

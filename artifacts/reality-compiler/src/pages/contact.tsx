@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { usePublicPageHead } from "@/lib/seo-defaults";
 
 const CHANNELS = [
   {
@@ -45,6 +46,11 @@ const CHANNELS = [
 type Topic = "general" | "privacy" | "security" | "legal" | "abuse";
 
 export default function ContactPage() {
+  usePublicPageHead(
+    "Contact Reality Compiler — support, privacy, and abuse",
+    "Send us a message about general questions, privacy or data-rights requests, security disclosures, legal notices, or marketplace abuse reports. We respond within two business days.",
+  );
+
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);

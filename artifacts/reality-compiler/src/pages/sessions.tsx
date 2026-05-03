@@ -7,8 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { usePrivatePageHead } from "@/lib/seo-defaults";
 
 export default function Sessions() {
+  usePrivatePageHead(
+    "Your sessions",
+    "Your private design sessions on Reality Compiler.",
+  );
   const [, setLocation] = useLocation();
   const { data: sessions, isLoading } = useListSessions();
 

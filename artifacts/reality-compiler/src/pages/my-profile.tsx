@@ -26,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PrivacyDataCard } from "@/components/privacy-data-card";
+import { usePrivatePageHead } from "@/lib/seo-defaults";
 
 const BIO_MAX = 500;
 const NAME_MAX = 80;
@@ -42,6 +43,10 @@ async function uploadAvatarStreaming(file: File): Promise<Me> {
 }
 
 export default function MyProfile() {
+  usePrivatePageHead(
+    "Your profile",
+    "Edit your public designer handle, bio, and avatar, and manage your account data.",
+  );
   const { data: me, isLoading } = useGetMe();
   const updateProfile = useUpdateMyProfile();
   const uploadAvatar = useMutation({ mutationFn: uploadAvatarStreaming });

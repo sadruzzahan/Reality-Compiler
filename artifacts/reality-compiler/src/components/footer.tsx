@@ -2,6 +2,9 @@ import { Link } from "wouter";
 import { Hexagon } from "lucide-react";
 
 const LEGAL_LINKS = [
+  { href: "/about", label: "How it works" },
+  { href: "/pricing", label: "Pricing" },
+  { href: "/marketplace", label: "Marketplace" },
   { href: "/terms", label: "Terms" },
   { href: "/privacy", label: "Privacy" },
   { href: "/acceptable-use", label: "Acceptable use" },

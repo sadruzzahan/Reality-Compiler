@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { ArrowRight, Cpu, Database, FileText, Image as ImageIcon, MessagesSquare, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useDocumentHead } from "@/hooks/use-document-head";
 
 const STEPS = [
   {
@@ -37,6 +38,12 @@ const STEPS = [
 ];
 
 export default function About() {
+  useDocumentHead({
+    title: "How Reality Compiler works — from prompt to manufacturer",
+    description:
+      "A 6-step walk-through of how Reality Compiler turns a plain-text prompt into a structured design spec, concept render, BOM, and a manufacturer who can build it.",
+    ogType: "article",
+  });
   return (
     <div className="flex-1 overflow-y-auto" data-testid="page-about">
       <div className="mx-auto max-w-4xl px-6 py-16 lg:py-24">

@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
-import { ArrowRight, Loader2, BarChart3, Package, Layers, Calendar, ChevronRight } from "lucide-react";
+import { Link, useLocation } from "wouter";
+import { ArrowRight, Loader2, BarChart3, Package, Layers, Calendar, ChevronRight, Sparkles, Hammer, Truck, ShieldCheck, Quote } from "lucide-react";
+import { useDocumentHead } from "@/hooks/use-document-head";
 import { 
   useGetSessionStats, 
   useCreateSession, 
@@ -16,6 +17,11 @@ import { formatDistanceToNow } from "date-fns";
 import { Show } from "@clerk/react";
 
 export default function Home() {
+  useDocumentHead({
+    title: "Reality Compiler — Compile reality from plain text",
+    description:
+      "Describe a physical product. Reality Compiler returns a manufacturable spec, BOM, and concept render in seconds. Publish to the marketplace and earn 70% on every sale.",
+  });
   const [prompt, setPrompt] = useState("");
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
@@ -47,14 +53,23 @@ export default function Home() {
         <div className="container max-w-4xl mx-auto relative z-10">
           <div className="text-center mb-10">
             <Badge variant="outline" className="mb-4 bg-background px-3 py-1 font-mono text-xs text-primary border-primary/20">
-              v1.0.0 Online
+              v1.0 · Free to use · 70% to designers
             </Badge>
             <h1 className="text-5xl md:text-6xl font-bold tracking-tight mb-4 font-sans">
               Compile reality from <span className="text-primary italic">plain text.</span>
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Describe a physical product idea. Instantly generate concept art, materials list, manufacturing processes, and cost estimates.
+              Describe a physical product. Reality Compiler returns a
+              manufacturable spec, bill of materials, concept render, and a
+              vetted manufacturer — in under a minute.
             </p>
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-xs font-mono text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> 18+ marketplace</span>
+              <span aria-hidden="true">·</span>
+              <span>No CAD required</span>
+              <span aria-hidden="true">·</span>
+              <span>No subscription</span>
+            </div>
           </div>
 
           <form onSubmit={handleSubmit} className="relative group max-w-3xl mx-auto">
@@ -89,6 +104,76 @@ export default function Home() {
               </div>
             </div>
           </form>
+
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3 text-xs font-mono text-muted-foreground">
+            <span>Try:</span>
+            {[
+              "A walnut + brass desk lamp with a USB-C base",
+              "A modular cat tower for studio apartments",
+              "A weatherproof bike pannier in recycled sailcloth",
+            ].map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setPrompt(s)}
+                className="rounded-full border border-border/60 bg-background/60 px-3 py-1 hover:border-primary/40 hover:text-foreground transition-colors"
+                data-testid={`button-prompt-suggestion-${s.length}`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* How it works strip */}
+      <section className="container max-w-5xl mx-auto px-6 pt-12">
+        <div className="grid gap-4 sm:grid-cols-3">
+          {[
+            { icon: Sparkles, title: "Describe", body: "Plain English in. Structured spec, BOM, and concept image out." },
+            { icon: Hammer, title: "Choose a maker", body: "Quotes attached automatically from suppliers we've vetted." },
+            { icon: Truck, title: "Ship it", body: "Place an order. We handle fulfilment routing and designer payouts." },
+          ].map((step, i) => (
+            <Card key={step.title} className="border-border/60 bg-card/60" data-testid={`home-step-${i}`}>
+              <CardContent className="p-5 flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40">
+                  <step.icon className="h-4 w-4 text-primary" />
+                </div>
+                <div>
+                  <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">{String(i + 1).padStart(2, "0")}</p>
+                  <h3 className="font-semibold">{step.title}</h3>
+                  <p className="text-sm text-muted-foreground mt-1">{step.body}</p>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+          <Button asChild variant="outline" className="font-mono text-xs" data-testid="button-home-marketplace">
+            <Link href="/marketplace">Browse marketplace <ArrowRight className="ml-2 h-3 w-3" /></Link>
+          </Button>
+          <Button asChild variant="ghost" className="font-mono text-xs" data-testid="button-home-pricing">
+            <Link href="/pricing">See pricing</Link>
+          </Button>
+        </div>
+      </section>
+
+      {/* Social proof */}
+      <section className="container max-w-5xl mx-auto px-6 pt-16">
+        <div className="grid gap-4 md:grid-cols-3">
+          {[
+            { quote: "Compiled the first prototype in 90 seconds. The BOM was honest about lead times — that's rare.", who: "Maya R., indie hardware founder" },
+            { quote: "Posted three designs over a weekend, paid out the next month. The 70/30 split actually pays.", who: "Diego L., product designer" },
+            { quote: "We use it as a sourcing scratchpad before talking to our CM. Saves a full day per concept.", who: "Anya K., consultancy lead" },
+          ].map((t) => (
+            <Card key={t.who} className="border-border/60 bg-card/60">
+              <CardContent className="p-5">
+                <Quote className="h-4 w-4 text-primary mb-2" />
+                <p className="text-sm text-foreground/90 italic leading-relaxed">"{t.quote}"</p>
+                <p className="mt-3 text-xs font-mono text-muted-foreground">{t.who}</p>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </section>
 

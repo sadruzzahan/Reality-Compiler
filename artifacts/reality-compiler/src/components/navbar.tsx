@@ -7,6 +7,7 @@ import {
   Truck,
   Store,
   Banknote,
+  CircleDollarSign,
   LogOut,
 } from "lucide-react";
 import { Show, useUser, useClerk } from "@clerk/react";
@@ -153,6 +154,14 @@ export function Navbar() {
             >
               <BookOpen className="w-4 h-4" />
               How It Works
+            </Link>
+            <Link
+              href="/pricing"
+              className="transition-colors hover:text-foreground/80 text-foreground/60 flex items-center gap-2"
+              data-testid="link-pricing"
+            >
+              <CircleDollarSign className="w-4 h-4" />
+              Pricing
             </Link>
           </nav>
         </div>

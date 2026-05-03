@@ -1,0 +1,16 @@
+User-agent: *
+Allow: /
+Disallow: /sessions
+Disallow: /sessions/
+Disallow: /orders
+Disallow: /orders/
+Disallow: /payouts
+Disallow: /payouts/
+Disallow: /my-profile
+Disallow: /my-profile/
+Disallow: /sign-in
+Disallow: /sign-up
+Allow: /api/sitemap.xml
+Disallow: /api/
+
+Sitemap: /api/sitemap.xml

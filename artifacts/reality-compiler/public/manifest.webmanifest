@@ -1,0 +1,28 @@
+{
+  "name": "Reality Compiler",
+  "short_name": "Reality Compiler",
+  "description": "Describe a physical product in plain text. Reality Compiler turns it into a manufacturable spec, BOM, and concept render — and a marketplace where designers earn from every order.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#7c3aed",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { usePrivatePageHead } from "@/lib/seo-defaults";
 
 const STATUS_FLOW: OrderStatus[] = [
   "queued",
@@ -63,6 +64,10 @@ function statusColor(status: string) {
 }
 
 export default function OrderDetail() {
+  usePrivatePageHead(
+    "Order detail",
+    "Track the fulfilment status of a marketplace order.",
+  );
   const { id } = useParams();
   const orderId = parseInt(id || "0", 10);
   const [, setLocation] = useLocation();

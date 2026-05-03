@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { usePrivatePageHead } from "@/lib/seo-defaults";
 
 function statusBadgeVariant(status: OrderSummaryStatus) {
   switch (status) {
@@ -39,6 +40,10 @@ function statusColorClass(status: OrderSummaryStatus) {
 }
 
 export default function Orders() {
+  usePrivatePageHead(
+    "Your orders",
+    "Track marketplace orders you've placed on Reality Compiler.",
+  );
   const [, setLocation] = useLocation();
   const { data: orders, isLoading } = useListOrders();
 

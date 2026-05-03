@@ -6,6 +6,7 @@ import {
   type OrderSummaryStatus,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { usePrivatePageHead } from "@/lib/seo-defaults";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -54,6 +55,10 @@ function payoutStatusLabel(status: OrderSummaryStatus): {
 }
 
 export default function Payouts() {
+  usePrivatePageHead(
+    "Designer payouts",
+    "Track license earnings, pending payouts, and your monthly payout schedule.",
+  );
   const { data: orders, isLoading } = useListDesignerOrders();
 
   const totalEarned =

@@ -40,6 +40,7 @@ import AcceptableUsePage from "@/pages/legal/acceptable-use";
 import CookiesPage from "@/pages/legal/cookies";
 import DpaPage from "@/pages/legal/dpa";
 import ContactPage from "@/pages/contact";
+import PricingPage from "@/pages/pricing";
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
 import { CookieBanner } from "@/components/cookie-banner";
@@ -310,6 +311,7 @@ function AppShell() {
           <Route path="/cookies" component={CookiesPage} />
           <Route path="/legal/dpa" component={DpaPage} />
           <Route path="/contact" component={ContactPage} />
+          <Route path="/pricing" component={PricingPage} />
           <Route path="/sessions">
             <RequireAuth>
               <Sessions />

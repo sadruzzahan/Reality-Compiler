@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useDocumentHead } from "@/hooks/use-document-head";
 
 export default function MarketplaceDetail() {
   const params = useParams();
@@ -50,6 +51,42 @@ export default function MarketplaceDetail() {
 
   const { data: listing, isLoading } = useGetMarketplaceListing(id);
   const placeOrder = usePlaceOrder();
+
+  useDocumentHead(
+    listing
+      ? {
+          title: `${listing.title} by @${listing.creatorHandle}`,
+          description:
+            listing.description.length > 160
+              ? `${listing.description.slice(0, 157)}…`
+              : listing.description,
+          image: listing.designOutput.imageUrl ?? undefined,
+          ogType: "product",
+          jsonLd: {
+            "@context": "https://schema.org",
+            "@type": "Product",
+            name: listing.title,
+            description: listing.description,
+            sku: `rc-listing-${listing.id}`,
+            image: listing.designOutput.imageUrl
+              ? [listing.designOutput.imageUrl]
+              : undefined,
+            category: listing.category,
+            brand: {
+              "@type": "Brand",
+              name: `@${listing.creatorHandle}`,
+            },
+            material: listing.designOutput.primaryMaterial,
+            offers: {
+              "@type": "Offer",
+              priceCurrency: "USD",
+              price: listing.listingPrice.toFixed(2),
+              availability: "https://schema.org/InStock",
+            },
+          },
+        }
+      : { title: "Marketplace listing", noIndex: true },
+  );
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedQuoteId, setSelectedQuoteId] = useState<number | null>(null);
