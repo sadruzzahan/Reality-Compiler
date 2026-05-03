@@ -55,11 +55,16 @@ export default function MarketplaceDetail() {
   useDocumentHead(
     listing
       ? {
-          title: `${listing.title} by @${listing.creatorHandle}`,
-          description:
-            listing.description.length > 160
-              ? `${listing.description.slice(0, 157)}…`
-              : listing.description,
+          title: `${listing.title} — $${listing.listingPrice.toFixed(2)} by @${listing.creatorHandle}`,
+          description: (() => {
+            const lead = `$${listing.listingPrice.toFixed(2)} · by @${listing.creatorHandle} · `;
+            const remaining = Math.max(0, 160 - lead.length);
+            const body =
+              listing.description.length > remaining
+                ? `${listing.description.slice(0, Math.max(0, remaining - 1))}…`
+                : listing.description;
+            return `${lead}${body}`;
+          })(),
           image: listing.designOutput.imageUrl ?? undefined,
           ogType: "product",
           jsonLd: {

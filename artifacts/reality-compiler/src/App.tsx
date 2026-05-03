@@ -21,6 +21,7 @@ import {
 } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useDocumentHead } from "@/hooks/use-document-head";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import Sessions from "@/pages/sessions";
@@ -117,6 +118,12 @@ const clerkAppearance = {
 };
 
 function SignInPage() {
+  useDocumentHead({
+    title: "Sign in to Reality Compiler",
+    description:
+      "Sign in to your Reality Compiler account to access your design sessions, marketplace orders, and designer payouts.",
+    noIndex: true,
+  });
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4">
       <SignIn
@@ -129,6 +136,12 @@ function SignInPage() {
 }
 
 function SignUpPage() {
+  useDocumentHead({
+    title: "Create your Reality Compiler account",
+    description:
+      "Sign up free to compile physical-product designs from plain text and earn 70% of every license sale on the marketplace.",
+    noIndex: true,
+  });
   const STORAGE_KEY = "rc_signup_consent_v1";
   const [accepted, setAccepted] = useState<boolean>(() => {
     try {

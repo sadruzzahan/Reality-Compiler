@@ -105,17 +105,18 @@ export function useDocumentHead(opts: DocumentHeadOptions): void {
       buildProperty("og:url"),
     );
 
-    if (opts.image) {
-      setMeta('meta[property="og:image"]', "content", opts.image, () =>
-        buildProperty("og:image"),
-      );
-      setMeta(
-        'meta[name="twitter:image"]',
-        "content",
-        opts.image,
-        () => buildMeta("twitter:image"),
-      );
-    }
+    // Always reconcile image tags — when a route doesn't supply an image
+    // we must clear any stale `og:image` / `twitter:image` left over from
+    // the previous SPA route, otherwise share previews show the wrong art.
+    setMeta('meta[property="og:image"]', "content", opts.image, () =>
+      buildProperty("og:image"),
+    );
+    setMeta(
+      'meta[name="twitter:image"]',
+      "content",
+      opts.image,
+      () => buildMeta("twitter:image"),
+    );
 
     setMeta(
       'meta[name="twitter:card"]',
