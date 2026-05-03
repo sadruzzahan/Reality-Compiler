@@ -9,13 +9,25 @@ export type AuditAction =
   | "order.advance"
   | "order.cancel"
   | "session.delete"
-  | "admin.action";
+  | "admin.action"
+  // Admin moderation actions (task #15). All admin.* actions carry the
+  // acting admin's Clerk userId in `actorUserId`.
+  | "admin.listing.hide"
+  | "admin.listing.restore"
+  | "admin.listing.remove"
+  | "admin.order.note"
+  | "admin.order.refund_initiated"
+  | "admin.user.suspend"
+  | "admin.user.unsuspend"
+  | "admin.report.create"
+  | "admin.report.update";
 
 export type AuditTargetType =
   | "marketplace_listing"
   | "order"
   | "design_session"
-  | "user";
+  | "user"
+  | "report";
 
 export interface RecordAuditInput {
   actorUserId: string | null;

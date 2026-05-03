@@ -53,6 +53,11 @@ import CookiesPage from "@/pages/legal/cookies";
 import DpaPage from "@/pages/legal/dpa";
 import ContactPage from "@/pages/contact";
 import PricingPage from "@/pages/pricing";
+import AdminDashboard from "@/pages/admin/dashboard";
+import AdminListings from "@/pages/admin/listings";
+import AdminOrdersPage from "@/pages/admin/orders";
+import AdminUsersPage from "@/pages/admin/users";
+import AdminReports from "@/pages/admin/reports";
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
 import { CookieBanner } from "@/components/cookie-banner";
@@ -416,6 +421,41 @@ function AppShell() {
           <Route path="/payouts">
             <RequireAuth>
               <Payouts />
+            </RequireAuth>
+          </Route>
+          <Route path="/admin">
+            <RequireAuth>
+              <AdminDashboard />
+            </RequireAuth>
+          </Route>
+          <Route path="/admin/listings">
+            <RequireAuth>
+              <AdminListings />
+            </RequireAuth>
+          </Route>
+          <Route path="/admin/orders">
+            <RequireAuth>
+              <AdminOrdersPage />
+            </RequireAuth>
+          </Route>
+          <Route path="/admin/orders/:id">
+            <RequireAuth>
+              <AdminOrdersPage />
+            </RequireAuth>
+          </Route>
+          <Route path="/admin/users">
+            <RequireAuth>
+              <AdminUsersPage />
+            </RequireAuth>
+          </Route>
+          <Route path="/admin/users/:userId">
+            <RequireAuth>
+              <AdminUsersPage />
+            </RequireAuth>
+          </Route>
+          <Route path="/admin/reports">
+            <RequireAuth>
+              <AdminReports />
             </RequireAuth>
           </Route>
           <Route component={NotFound} />

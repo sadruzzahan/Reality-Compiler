@@ -20,6 +20,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDocumentHead } from "@/hooks/use-document-head";
+import { ReportDialog } from "@/components/report-dialog";
 
 const PAGE_SIZE = 24;
 
@@ -135,12 +136,19 @@ export default function DesignerProfile() {
                 )}
               </div>
               <div className="flex-1">
-                <h1
-                  className="text-3xl font-bold font-sans"
-                  data-testid="text-designer-name"
-                >
-                  {data.displayName ?? `@${data.handle}`}
-                </h1>
+                <div className="flex items-start justify-between gap-2">
+                  <h1
+                    className="text-3xl font-bold font-sans"
+                    data-testid="text-designer-name"
+                  >
+                    {data.displayName ?? `@${data.handle}`}
+                  </h1>
+                  <ReportDialog
+                    targetType="designer"
+                    targetId={userId}
+                    targetLabel={`@${data.handle}`}
+                  />
+                </div>
                 <p className="text-muted-foreground mt-1 font-mono text-sm">
                   {data.displayName ? `@${data.handle} · ` : ""}Designer ·
                   Reality Compiler studio

@@ -28,6 +28,10 @@ tags:
     description: Current authenticated user
   - name: storage
     description: Hosted object storage (images, avatars)
+  - name: admin
+    description: Admin moderation console (requires Clerk publicMetadata.role = admin)
+  - name: reports
+    description: User-submitted abuse / IP / fraud reports
 paths:
   /healthz:
     get:
@@ -519,29 +523,264 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /reports:
+    post:
+      operationId: createReport
+      tags: [reports]
+      summary: File a report against a listing or designer
+      description: |
+        Authenticated endpoint. Filed reports land in `reports` with
+        `status = open` and an `admin.report.create` audit row. Admins
+        triage them via `GET /admin/reports`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReportInput"
+      responses:
+        "201":
+          description: Report filed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/dashboard:
+    get:
+      operationId: getAdminDashboard
+      tags: [admin]
+      summary: Aggregate counters for the admin overview screen
+      responses:
+        "200":
+          description: Dashboard counters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminDashboard"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/listings:
+    get:
+      operationId: adminListListings
+      tags: [admin]
+      summary: List every marketplace listing (any status, any owner)
+      parameters:
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [active, hidden, removed, all]
+        - in: query
+          name: q
+          required: false
+          schema: { type: string, maxLength: 200 }
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        "200":
+          description: Listings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminListingRow"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/listings/{id}:
+    patch:
+      operationId: adminUpdateListing
+      tags: [admin]
+      summary: Hide, restore, or remove a marketplace listing
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminListingPatch"
+      responses:
+        "200":
+          description: Updated listing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminListingRow"
+        "400":
+          description: Invalid action
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/orders:
+    get:
+      operationId: adminListOrders
+      tags: [admin]
+      summary: List every order (any buyer / supplier / status)
+      parameters:
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [queued, in_production, quality_check, shipped, delivered, all]
+        - in: query
+          name: paymentStatus
+          required: false
+          schema:
+            type: string
+            enum: [pending_payment, paid, failed, refunded, partially_refunded, all]
+        - in: query
+          name: q
+          required: false
+          schema: { type: string, maxLength: 200 }
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        "200":
+          description: Orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminOrderRow"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/orders/{id}:
+    get:
+      operationId: adminGetOrder
+      tags: [admin]
+      summary: Full order detail with admin notes and audit trail
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Order detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOrderDetail"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/orders/{id}/notes:
+    post:
+      operationId: adminAddOrderNote
+      tags: [admin]
+      summary: Append an internal admin note to an order
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminOrderNoteInput"
+      responses:
+        "200":
+          description: Updated detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOrderDetail"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /admin/orders/{id}/refund:
     post:
-      operationId: refundOrder
-      tags: [orders]
+      operationId: adminRefundOrder
+      tags: [admin]
       summary: Refund (full or partial) a paid order
       description: |
-        Admin-only. Authenticated via the `x-admin-token` header against
-        the server-side `ADMIN_API_TOKEN`. Triggers a Stripe Refund with
-        `reverse_transfer` + `refund_application_fee` so the designer's
-        Connect transfer and the platform fee are clawed back
-        proportionally. The order's `paymentStatus` and `refundedAmount`
-        columns are updated by the `charge.refunded` webhook.
+        Admin console replacement for the legacy x-admin-token refund
+        endpoint. Triggers a Stripe Refund with `reverse_transfer` +
+        `refund_application_fee` so the designer's Connect transfer and
+        the platform fee are clawed back proportionally. The order's
+        `paymentStatus` and `refundedAmount` columns are updated by the
+        `charge.refunded` webhook.
       parameters:
         - in: path
           name: id
           required: true
           schema:
             type: integer
-        - in: header
-          name: x-admin-token
-          required: true
-          schema:
-            type: string
       requestBody:
         required: true
         content:
@@ -561,8 +800,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          description: Invalid admin token
+        "403":
+          description: Not an admin
           content:
             application/json:
               schema:
@@ -573,6 +812,236 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/users:
+    get:
+      operationId: adminListUsers
+      tags: [admin]
+      summary: Search users by email, handle, or userId
+      parameters:
+        - in: query
+          name: q
+          required: false
+          schema: { type: string, maxLength: 200 }
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [all, active, suspended, deleted]
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminUserRow"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/users/{userId}:
+    get:
+      operationId: adminGetUser
+      tags: [admin]
+      summary: Full admin view of a single user
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: User detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserDetail"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/users/{userId}/suspend:
+    post:
+      operationId: adminSuspendUser
+      tags: [admin]
+      summary: Suspend a user account (sets user_profiles.suspended_at)
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminSuspendInput"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserDetail"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/users/{userId}/unsuspend:
+    post:
+      operationId: adminUnsuspendUser
+      tags: [admin]
+      summary: Lift an existing suspension on a user account
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserDetail"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/reports:
+    get:
+      operationId: adminListReports
+      tags: [admin]
+      summary: List user-submitted reports for triage
+      parameters:
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [open, reviewing, resolved, dismissed, all]
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        "200":
+          description: Reports
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminReportRow"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/reports/{id}:
+    patch:
+      operationId: adminUpdateReport
+      tags: [admin]
+      summary: Update report status / resolution notes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminReportPatch"
+      responses:
+        "200":
+          description: Updated report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminReportRow"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/me:
+    get:
+      operationId: getAdminMe
+      tags: [admin]
+      summary: Returns whether the current caller is an admin
+      description: |
+        Cheap, public-ish probe used by the SPA to decide whether to show
+        the admin console link. Returns `{ isAdmin: false }` for guests
+        and non-admins; `{ isAdmin: true }` only when the Clerk session
+        carries `publicMetadata.role = admin`.
+      responses:
+        "200":
+          description: Admin status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminMe"
 
   /admin/purge-deleted:
     post:
@@ -2034,3 +2503,371 @@ components:
         - orderId
         - refundId
         - amount
+
+    ReportTargetType:
+      type: string
+      enum: [listing, designer, order]
+
+    ReportReason:
+      type: string
+      enum: [spam, ip_violation, prohibited_content, fraud, harassment, other]
+
+    ReportStatus:
+      type: string
+      enum: [open, reviewing, resolved, dismissed]
+
+    CreateReportInput:
+      type: object
+      required: [targetType, targetId, reason]
+      properties:
+        targetType:
+          $ref: "#/components/schemas/ReportTargetType"
+        targetId:
+          description: |
+            String form of the target id. For `listing` and `order` this
+            is the numeric id stringified; for `designer` it's the Clerk
+            userId.
+          type: string
+          maxLength: 128
+        reason:
+          $ref: "#/components/schemas/ReportReason"
+        notes:
+          type: ["string", "null"]
+          maxLength: 2000
+
+    Report:
+      type: object
+      required:
+        - id
+        - reporterUserId
+        - targetType
+        - targetId
+        - reason
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id: { type: integer }
+        reporterUserId: { type: string }
+        targetType:
+          $ref: "#/components/schemas/ReportTargetType"
+        targetId: { type: string }
+        reason:
+          $ref: "#/components/schemas/ReportReason"
+        notes:
+          type: ["string", "null"]
+        status:
+          $ref: "#/components/schemas/ReportStatus"
+        resolvedBy:
+          type: ["string", "null"]
+        resolvedAt:
+          type: ["string", "null"]
+          format: date-time
+        resolutionNotes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AdminMe:
+      type: object
+      required: [isAdmin]
+      properties:
+        isAdmin: { type: boolean }
+        userId:
+          type: ["string", "null"]
+
+    AdminDashboard:
+      type: object
+      required:
+        - openReports
+        - activeListings
+        - hiddenListings
+        - removedListings
+        - ordersAwaitingPayment
+        - ordersInProgress
+        - suspendedUsers
+        - last24hOrders
+        - last24hReports
+      properties:
+        openReports: { type: integer }
+        activeListings: { type: integer }
+        hiddenListings: { type: integer }
+        removedListings: { type: integer }
+        ordersAwaitingPayment: { type: integer }
+        ordersInProgress: { type: integer }
+        suspendedUsers: { type: integer }
+        last24hOrders: { type: integer }
+        last24hReports: { type: integer }
+
+    AdminListingRow:
+      type: object
+      required:
+        - id
+        - sessionId
+        - userId
+        - creatorHandle
+        - title
+        - category
+        - listingPrice
+        - status
+        - orderCount
+        - createdAt
+      properties:
+        id: { type: integer }
+        sessionId: { type: integer }
+        userId: { type: string }
+        creatorHandle: { type: string }
+        title: { type: string }
+        category: { type: string }
+        description: { type: string }
+        listingPrice: { type: number }
+        status:
+          type: string
+          enum: [active, hidden, removed]
+        thumbnailUrl:
+          type: ["string", "null"]
+        orderCount: { type: integer }
+        deletedAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AdminListingPatch:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [hide, restore, remove]
+        reason:
+          type: ["string", "null"]
+          maxLength: 500
+
+    AdminOrderRow:
+      type: object
+      required:
+        - id
+        - userId
+        - status
+        - paymentStatus
+        - quantity
+        - totalCost
+        - refundedAmount
+        - supplierName
+        - createdAt
+      properties:
+        id: { type: integer }
+        userId: { type: string }
+        buyerHandle:
+          type: ["string", "null"]
+        designerUserId:
+          type: ["string", "null"]
+        designerHandle:
+          type: ["string", "null"]
+        listingId:
+          type: ["integer", "null"]
+        listingTitle:
+          type: ["string", "null"]
+        sessionTitle:
+          type: ["string", "null"]
+        supplierName: { type: string }
+        status:
+          type: string
+          enum: [queued, in_production, quality_check, shipped, delivered]
+        paymentStatus:
+          $ref: "#/components/schemas/PaymentStatus"
+        quantity: { type: integer }
+        totalCost: { type: number }
+        refundedAmount: { type: number }
+        adminNoteCount: { type: integer }
+        createdAt:
+          type: string
+          format: date-time
+
+    AdminOrderNoteEntry:
+      type: object
+      required: [by, at, text]
+      properties:
+        by: { type: string }
+        at:
+          type: string
+          format: date-time
+        text: { type: string }
+        byHandle:
+          type: ["string", "null"]
+
+    AdminAuditEntry:
+      type: object
+      required: [id, action, targetType, targetId, createdAt]
+      properties:
+        id: { type: integer }
+        actorUserId:
+          type: ["string", "null"]
+        actorHandle:
+          type: ["string", "null"]
+        action: { type: string }
+        targetType: { type: string }
+        targetId: { type: string }
+        before:
+          description: Free-form JSON snapshot before the change.
+          nullable: true
+        after:
+          description: Free-form JSON snapshot after the change.
+          nullable: true
+        requestId:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    AdminOrderDetail:
+      type: object
+      required: [order, adminNotes, auditLog]
+      properties:
+        order:
+          $ref: "#/components/schemas/Order"
+        userId: { type: string }
+        buyerHandle:
+          type: ["string", "null"]
+        designerHandle:
+          type: ["string", "null"]
+        listingId:
+          type: ["integer", "null"]
+        listingTitle:
+          type: ["string", "null"]
+        adminNotes:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminOrderNoteEntry"
+        auditLog:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminAuditEntry"
+
+    AdminOrderNoteInput:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 2000
+
+    AdminUserRow:
+      type: object
+      required: [userId, handle, isAdmin]
+      properties:
+        userId: { type: string }
+        handle: { type: string }
+        email:
+          type: ["string", "null"]
+        displayName:
+          type: ["string", "null"]
+        avatarUrl:
+          type: ["string", "null"]
+        isAdmin: { type: boolean }
+        suspendedAt:
+          type: ["string", "null"]
+          format: date-time
+        suspensionReason:
+          type: ["string", "null"]
+        deletedAt:
+          type: ["string", "null"]
+          format: date-time
+        listingCount: { type: integer }
+        orderCount: { type: integer }
+        createdAt:
+          type: ["string", "null"]
+          format: date-time
+
+    AdminUserDetail:
+      type: object
+      required: [user, recentListings, recentOrders, recentReports, auditLog]
+      properties:
+        user:
+          $ref: "#/components/schemas/AdminUserRow"
+        recentListings:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminListingRow"
+        recentOrders:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminOrderRow"
+        recentReports:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminReportRow"
+        auditLog:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminAuditEntry"
+
+    AdminSuspendInput:
+      type: object
+      properties:
+        reason:
+          type: ["string", "null"]
+          maxLength: 500
+
+    AdminReportRow:
+      type: object
+      required:
+        - id
+        - reporterUserId
+        - targetType
+        - targetId
+        - reason
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id: { type: integer }
+        reporterUserId: { type: string }
+        reporterHandle:
+          type: ["string", "null"]
+        targetType:
+          $ref: "#/components/schemas/ReportTargetType"
+        targetId: { type: string }
+        targetTitle:
+          type: ["string", "null"]
+        reason:
+          $ref: "#/components/schemas/ReportReason"
+        notes:
+          type: ["string", "null"]
+        status:
+          $ref: "#/components/schemas/ReportStatus"
+        resolvedBy:
+          type: ["string", "null"]
+        resolvedByHandle:
+          type: ["string", "null"]
+        resolvedAt:
+          type: ["string", "null"]
+          format: date-time
+        resolutionNotes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AdminReportPatch:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: "#/components/schemas/ReportStatus"
+        resolutionNotes:
+          type: ["string", "null"]
+          maxLength: 2000

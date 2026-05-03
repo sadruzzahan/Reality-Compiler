@@ -780,24 +780,517 @@ export const GetConnectStatusResponse = zod.object({
 });
 
 /**
- * Admin-only. Authenticated via the `x-admin-token` header against
-the server-side `ADMIN_API_TOKEN`. Triggers a Stripe Refund with
-`reverse_transfer` + `refund_application_fee` so the designer's
-Connect transfer and the platform fee are clawed back
-proportionally. The order's `paymentStatus` and `refundedAmount`
-columns are updated by the `charge.refunded` webhook.
+ * Authenticated endpoint. Filed reports land in `reports` with
+`status = open` and an `admin.report.create` audit row. Admins
+triage them via `GET /admin/reports`.
 
- * @summary Refund (full or partial) a paid order
+ * @summary File a report against a listing or designer
  */
-export const RefundOrderParams = zod.object({
+export const createReportBodyTargetIdMax = 128;
+
+export const createReportBodyNotesMax = 2000;
+
+export const CreateReportBody = zod.object({
+  targetType: zod.enum(["listing", "designer", "order"]),
+  targetId: zod
+    .string()
+    .max(createReportBodyTargetIdMax)
+    .describe(
+      "String form of the target id. For `listing` and `order` this\nis the numeric id stringified; for `designer` it's the Clerk\nuserId.\n",
+    ),
+  reason: zod.enum([
+    "spam",
+    "ip_violation",
+    "prohibited_content",
+    "fraud",
+    "harassment",
+    "other",
+  ]),
+  notes: zod.string().max(createReportBodyNotesMax).nullish(),
+});
+
+/**
+ * @summary Aggregate counters for the admin overview screen
+ */
+export const GetAdminDashboardResponse = zod.object({
+  openReports: zod.number(),
+  activeListings: zod.number(),
+  hiddenListings: zod.number(),
+  removedListings: zod.number(),
+  ordersAwaitingPayment: zod.number(),
+  ordersInProgress: zod.number(),
+  suspendedUsers: zod.number(),
+  last24hOrders: zod.number(),
+  last24hReports: zod.number(),
+});
+
+/**
+ * @summary List every marketplace listing (any status, any owner)
+ */
+export const adminListListingsQueryQMax = 200;
+
+export const adminListListingsQueryLimitDefault = 50;
+export const adminListListingsQueryLimitMax = 100;
+
+export const AdminListListingsQueryParams = zod.object({
+  status: zod.enum(["active", "hidden", "removed", "all"]).optional(),
+  q: zod.coerce.string().max(adminListListingsQueryQMax).optional(),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(adminListListingsQueryLimitMax)
+    .default(adminListListingsQueryLimitDefault),
+});
+
+export const AdminListListingsResponseItem = zod.object({
+  id: zod.number(),
+  sessionId: zod.number(),
+  userId: zod.string(),
+  creatorHandle: zod.string(),
+  title: zod.string(),
+  category: zod.string(),
+  description: zod.string().optional(),
+  listingPrice: zod.number(),
+  status: zod.enum(["active", "hidden", "removed"]),
+  thumbnailUrl: zod.string().nullish(),
+  orderCount: zod.number(),
+  deletedAt: zod.coerce.date().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date().optional(),
+});
+export const AdminListListingsResponse = zod.array(
+  AdminListListingsResponseItem,
+);
+
+/**
+ * @summary Hide, restore, or remove a marketplace listing
+ */
+export const AdminUpdateListingParams = zod.object({
   id: zod.coerce.number(),
 });
 
-export const RefundOrderHeader = zod.object({
-  "x-admin-token": zod.string(),
+export const adminUpdateListingBodyReasonMax = 500;
+
+export const AdminUpdateListingBody = zod.object({
+  action: zod.enum(["hide", "restore", "remove"]),
+  reason: zod.string().max(adminUpdateListingBodyReasonMax).nullish(),
 });
 
-export const RefundOrderBody = zod.object({
+export const AdminUpdateListingResponse = zod.object({
+  id: zod.number(),
+  sessionId: zod.number(),
+  userId: zod.string(),
+  creatorHandle: zod.string(),
+  title: zod.string(),
+  category: zod.string(),
+  description: zod.string().optional(),
+  listingPrice: zod.number(),
+  status: zod.enum(["active", "hidden", "removed"]),
+  thumbnailUrl: zod.string().nullish(),
+  orderCount: zod.number(),
+  deletedAt: zod.coerce.date().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date().optional(),
+});
+
+/**
+ * @summary List every order (any buyer / supplier / status)
+ */
+export const adminListOrdersQueryQMax = 200;
+
+export const adminListOrdersQueryLimitDefault = 50;
+export const adminListOrdersQueryLimitMax = 100;
+
+export const AdminListOrdersQueryParams = zod.object({
+  status: zod
+    .enum([
+      "queued",
+      "in_production",
+      "quality_check",
+      "shipped",
+      "delivered",
+      "all",
+    ])
+    .optional(),
+  paymentStatus: zod
+    .enum([
+      "pending_payment",
+      "paid",
+      "failed",
+      "refunded",
+      "partially_refunded",
+      "all",
+    ])
+    .optional(),
+  q: zod.coerce.string().max(adminListOrdersQueryQMax).optional(),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(adminListOrdersQueryLimitMax)
+    .default(adminListOrdersQueryLimitDefault),
+});
+
+export const AdminListOrdersResponseItem = zod.object({
+  id: zod.number(),
+  userId: zod.string(),
+  buyerHandle: zod.string().nullish(),
+  designerUserId: zod.string().nullish(),
+  designerHandle: zod.string().nullish(),
+  listingId: zod.number().nullish(),
+  listingTitle: zod.string().nullish(),
+  sessionTitle: zod.string().nullish(),
+  supplierName: zod.string(),
+  status: zod.enum([
+    "queued",
+    "in_production",
+    "quality_check",
+    "shipped",
+    "delivered",
+  ]),
+  paymentStatus: zod.enum([
+    "pending_payment",
+    "paid",
+    "failed",
+    "refunded",
+    "partially_refunded",
+  ]),
+  quantity: zod.number(),
+  totalCost: zod.number(),
+  refundedAmount: zod.number(),
+  adminNoteCount: zod.number().optional(),
+  createdAt: zod.coerce.date(),
+});
+export const AdminListOrdersResponse = zod.array(AdminListOrdersResponseItem);
+
+/**
+ * @summary Full order detail with admin notes and audit trail
+ */
+export const AdminGetOrderParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const AdminGetOrderResponse = zod.object({
+  order: zod.object({
+    id: zod.number(),
+    sessionId: zod.number(),
+    sessionTitle: zod.string(),
+    productName: zod.string().nullish(),
+    quote: zod.object({
+      id: zod.number(),
+      sessionId: zod.number(),
+      supplier: zod.object({
+        id: zod.number(),
+        slug: zod.string(),
+        name: zod.string(),
+        tagline: zod.string(),
+        description: zod.string(),
+        location: zod.string(),
+        country: zod.string(),
+        capabilities: zod.array(zod.string()),
+        materials: zod.array(zod.string()),
+        certifications: zod.array(zod.string()),
+        leadTimeMinDays: zod.number(),
+        leadTimeMaxDays: zod.number(),
+        pricingMultiplier: zod.number(),
+        setupFee: zod.number(),
+        rating: zod.number(),
+        capacityLevel: zod.enum(["low", "medium", "high"]),
+      }),
+      unitCost: zod.number(),
+      setupFee: zod.number(),
+      totalCost: zod.number(),
+      leadTimeDays: zod.number(),
+      processBreakdown: zod.array(
+        zod.object({
+          process: zod.string(),
+          description: zod.string(),
+          cost: zod.number(),
+        }),
+      ),
+      scoreFactors: zod.object({
+        processMatch: zod.number(),
+        materialMatch: zod.number(),
+        leadTime: zod.number(),
+        rating: zod.number(),
+        total: zod.number(),
+      }),
+      rank: zod.number(),
+      notes: zod.string(),
+      createdAt: zod.coerce.date(),
+    }),
+    supplier: zod.object({
+      id: zod.number(),
+      slug: zod.string(),
+      name: zod.string(),
+      tagline: zod.string(),
+      description: zod.string(),
+      location: zod.string(),
+      country: zod.string(),
+      capabilities: zod.array(zod.string()),
+      materials: zod.array(zod.string()),
+      certifications: zod.array(zod.string()),
+      leadTimeMinDays: zod.number(),
+      leadTimeMaxDays: zod.number(),
+      pricingMultiplier: zod.number(),
+      setupFee: zod.number(),
+      rating: zod.number(),
+      capacityLevel: zod.enum(["low", "medium", "high"]),
+    }),
+    quantity: zod.number(),
+    totalCost: zod.number(),
+    payoutAmount: zod.number(),
+    designerUserId: zod.string().nullish(),
+    leadTimeDays: zod.number(),
+    shippingAddress: zod.object({
+      recipient: zod.string(),
+      line1: zod.string(),
+      line2: zod.string().nullish(),
+      city: zod.string(),
+      region: zod.string(),
+      postalCode: zod.string(),
+      country: zod.string(),
+    }),
+    status: zod.enum([
+      "queued",
+      "in_production",
+      "quality_check",
+      "shipped",
+      "delivered",
+    ]),
+    statusHistory: zod.array(
+      zod.object({
+        status: zod.enum([
+          "queued",
+          "in_production",
+          "quality_check",
+          "shipped",
+          "delivered",
+        ]),
+        note: zod.string(),
+        at: zod.coerce.date(),
+      }),
+    ),
+    paymentStatus: zod.enum([
+      "pending_payment",
+      "paid",
+      "failed",
+      "refunded",
+      "partially_refunded",
+    ]),
+    refundedAmount: zod.number(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  }),
+  userId: zod.string().optional(),
+  buyerHandle: zod.string().nullish(),
+  designerHandle: zod.string().nullish(),
+  listingId: zod.number().nullish(),
+  listingTitle: zod.string().nullish(),
+  adminNotes: zod.array(
+    zod.object({
+      by: zod.string(),
+      at: zod.coerce.date(),
+      text: zod.string(),
+      byHandle: zod.string().nullish(),
+    }),
+  ),
+  auditLog: zod.array(
+    zod.object({
+      id: zod.number(),
+      actorUserId: zod.string().nullish(),
+      actorHandle: zod.string().nullish(),
+      action: zod.string(),
+      targetType: zod.string(),
+      targetId: zod.string(),
+      before: zod
+        .unknown()
+        .nullish()
+        .describe("Free-form JSON snapshot before the change."),
+      after: zod
+        .unknown()
+        .nullish()
+        .describe("Free-form JSON snapshot after the change."),
+      requestId: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Append an internal admin note to an order
+ */
+export const AdminAddOrderNoteParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const adminAddOrderNoteBodyTextMax = 2000;
+
+export const AdminAddOrderNoteBody = zod.object({
+  text: zod.string().min(1).max(adminAddOrderNoteBodyTextMax),
+});
+
+export const AdminAddOrderNoteResponse = zod.object({
+  order: zod.object({
+    id: zod.number(),
+    sessionId: zod.number(),
+    sessionTitle: zod.string(),
+    productName: zod.string().nullish(),
+    quote: zod.object({
+      id: zod.number(),
+      sessionId: zod.number(),
+      supplier: zod.object({
+        id: zod.number(),
+        slug: zod.string(),
+        name: zod.string(),
+        tagline: zod.string(),
+        description: zod.string(),
+        location: zod.string(),
+        country: zod.string(),
+        capabilities: zod.array(zod.string()),
+        materials: zod.array(zod.string()),
+        certifications: zod.array(zod.string()),
+        leadTimeMinDays: zod.number(),
+        leadTimeMaxDays: zod.number(),
+        pricingMultiplier: zod.number(),
+        setupFee: zod.number(),
+        rating: zod.number(),
+        capacityLevel: zod.enum(["low", "medium", "high"]),
+      }),
+      unitCost: zod.number(),
+      setupFee: zod.number(),
+      totalCost: zod.number(),
+      leadTimeDays: zod.number(),
+      processBreakdown: zod.array(
+        zod.object({
+          process: zod.string(),
+          description: zod.string(),
+          cost: zod.number(),
+        }),
+      ),
+      scoreFactors: zod.object({
+        processMatch: zod.number(),
+        materialMatch: zod.number(),
+        leadTime: zod.number(),
+        rating: zod.number(),
+        total: zod.number(),
+      }),
+      rank: zod.number(),
+      notes: zod.string(),
+      createdAt: zod.coerce.date(),
+    }),
+    supplier: zod.object({
+      id: zod.number(),
+      slug: zod.string(),
+      name: zod.string(),
+      tagline: zod.string(),
+      description: zod.string(),
+      location: zod.string(),
+      country: zod.string(),
+      capabilities: zod.array(zod.string()),
+      materials: zod.array(zod.string()),
+      certifications: zod.array(zod.string()),
+      leadTimeMinDays: zod.number(),
+      leadTimeMaxDays: zod.number(),
+      pricingMultiplier: zod.number(),
+      setupFee: zod.number(),
+      rating: zod.number(),
+      capacityLevel: zod.enum(["low", "medium", "high"]),
+    }),
+    quantity: zod.number(),
+    totalCost: zod.number(),
+    payoutAmount: zod.number(),
+    designerUserId: zod.string().nullish(),
+    leadTimeDays: zod.number(),
+    shippingAddress: zod.object({
+      recipient: zod.string(),
+      line1: zod.string(),
+      line2: zod.string().nullish(),
+      city: zod.string(),
+      region: zod.string(),
+      postalCode: zod.string(),
+      country: zod.string(),
+    }),
+    status: zod.enum([
+      "queued",
+      "in_production",
+      "quality_check",
+      "shipped",
+      "delivered",
+    ]),
+    statusHistory: zod.array(
+      zod.object({
+        status: zod.enum([
+          "queued",
+          "in_production",
+          "quality_check",
+          "shipped",
+          "delivered",
+        ]),
+        note: zod.string(),
+        at: zod.coerce.date(),
+      }),
+    ),
+    paymentStatus: zod.enum([
+      "pending_payment",
+      "paid",
+      "failed",
+      "refunded",
+      "partially_refunded",
+    ]),
+    refundedAmount: zod.number(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  }),
+  userId: zod.string().optional(),
+  buyerHandle: zod.string().nullish(),
+  designerHandle: zod.string().nullish(),
+  listingId: zod.number().nullish(),
+  listingTitle: zod.string().nullish(),
+  adminNotes: zod.array(
+    zod.object({
+      by: zod.string(),
+      at: zod.coerce.date(),
+      text: zod.string(),
+      byHandle: zod.string().nullish(),
+    }),
+  ),
+  auditLog: zod.array(
+    zod.object({
+      id: zod.number(),
+      actorUserId: zod.string().nullish(),
+      actorHandle: zod.string().nullish(),
+      action: zod.string(),
+      targetType: zod.string(),
+      targetId: zod.string(),
+      before: zod
+        .unknown()
+        .nullish()
+        .describe("Free-form JSON snapshot before the change."),
+      after: zod
+        .unknown()
+        .nullish()
+        .describe("Free-form JSON snapshot after the change."),
+      requestId: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * Admin console replacement for the legacy x-admin-token refund
+endpoint. Triggers a Stripe Refund with `reverse_transfer` +
+`refund_application_fee` so the designer's Connect transfer and
+the platform fee are clawed back proportionally. The order's
+`paymentStatus` and `refundedAmount` columns are updated by the
+`charge.refunded` webhook.
+
+ * @summary Refund (full or partial) a paid order
+ */
+export const AdminRefundOrderParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const AdminRefundOrderBody = zod.object({
   amount: zod
     .number()
     .nullish()
@@ -809,11 +1302,509 @@ export const RefundOrderBody = zod.object({
     .optional(),
 });
 
-export const RefundOrderResponse = zod.object({
+export const AdminRefundOrderResponse = zod.object({
   orderId: zod.number(),
   refundId: zod.string(),
   amount: zod.number(),
   status: zod.string().nullish(),
+});
+
+/**
+ * @summary Search users by email, handle, or userId
+ */
+export const adminListUsersQueryQMax = 200;
+
+export const adminListUsersQueryLimitDefault = 50;
+export const adminListUsersQueryLimitMax = 100;
+
+export const AdminListUsersQueryParams = zod.object({
+  q: zod.coerce.string().max(adminListUsersQueryQMax).optional(),
+  status: zod.enum(["all", "active", "suspended", "deleted"]).optional(),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(adminListUsersQueryLimitMax)
+    .default(adminListUsersQueryLimitDefault),
+});
+
+export const AdminListUsersResponseItem = zod.object({
+  userId: zod.string(),
+  handle: zod.string(),
+  email: zod.string().nullish(),
+  displayName: zod.string().nullish(),
+  avatarUrl: zod.string().nullish(),
+  isAdmin: zod.boolean(),
+  suspendedAt: zod.coerce.date().nullish(),
+  suspensionReason: zod.string().nullish(),
+  deletedAt: zod.coerce.date().nullish(),
+  listingCount: zod.number().optional(),
+  orderCount: zod.number().optional(),
+  createdAt: zod.coerce.date().nullish(),
+});
+export const AdminListUsersResponse = zod.array(AdminListUsersResponseItem);
+
+/**
+ * @summary Full admin view of a single user
+ */
+export const AdminGetUserParams = zod.object({
+  userId: zod.coerce.string(),
+});
+
+export const AdminGetUserResponse = zod.object({
+  user: zod.object({
+    userId: zod.string(),
+    handle: zod.string(),
+    email: zod.string().nullish(),
+    displayName: zod.string().nullish(),
+    avatarUrl: zod.string().nullish(),
+    isAdmin: zod.boolean(),
+    suspendedAt: zod.coerce.date().nullish(),
+    suspensionReason: zod.string().nullish(),
+    deletedAt: zod.coerce.date().nullish(),
+    listingCount: zod.number().optional(),
+    orderCount: zod.number().optional(),
+    createdAt: zod.coerce.date().nullish(),
+  }),
+  recentListings: zod.array(
+    zod.object({
+      id: zod.number(),
+      sessionId: zod.number(),
+      userId: zod.string(),
+      creatorHandle: zod.string(),
+      title: zod.string(),
+      category: zod.string(),
+      description: zod.string().optional(),
+      listingPrice: zod.number(),
+      status: zod.enum(["active", "hidden", "removed"]),
+      thumbnailUrl: zod.string().nullish(),
+      orderCount: zod.number(),
+      deletedAt: zod.coerce.date().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date().optional(),
+    }),
+  ),
+  recentOrders: zod.array(
+    zod.object({
+      id: zod.number(),
+      userId: zod.string(),
+      buyerHandle: zod.string().nullish(),
+      designerUserId: zod.string().nullish(),
+      designerHandle: zod.string().nullish(),
+      listingId: zod.number().nullish(),
+      listingTitle: zod.string().nullish(),
+      sessionTitle: zod.string().nullish(),
+      supplierName: zod.string(),
+      status: zod.enum([
+        "queued",
+        "in_production",
+        "quality_check",
+        "shipped",
+        "delivered",
+      ]),
+      paymentStatus: zod.enum([
+        "pending_payment",
+        "paid",
+        "failed",
+        "refunded",
+        "partially_refunded",
+      ]),
+      quantity: zod.number(),
+      totalCost: zod.number(),
+      refundedAmount: zod.number(),
+      adminNoteCount: zod.number().optional(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  recentReports: zod.array(
+    zod.object({
+      id: zod.number(),
+      reporterUserId: zod.string(),
+      reporterHandle: zod.string().nullish(),
+      targetType: zod.enum(["listing", "designer", "order"]),
+      targetId: zod.string(),
+      targetTitle: zod.string().nullish(),
+      reason: zod.enum([
+        "spam",
+        "ip_violation",
+        "prohibited_content",
+        "fraud",
+        "harassment",
+        "other",
+      ]),
+      notes: zod.string().nullish(),
+      status: zod.enum(["open", "reviewing", "resolved", "dismissed"]),
+      resolvedBy: zod.string().nullish(),
+      resolvedByHandle: zod.string().nullish(),
+      resolvedAt: zod.coerce.date().nullish(),
+      resolutionNotes: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+  auditLog: zod.array(
+    zod.object({
+      id: zod.number(),
+      actorUserId: zod.string().nullish(),
+      actorHandle: zod.string().nullish(),
+      action: zod.string(),
+      targetType: zod.string(),
+      targetId: zod.string(),
+      before: zod
+        .unknown()
+        .nullish()
+        .describe("Free-form JSON snapshot before the change."),
+      after: zod
+        .unknown()
+        .nullish()
+        .describe("Free-form JSON snapshot after the change."),
+      requestId: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Suspend a user account (sets user_profiles.suspended_at)
+ */
+export const AdminSuspendUserParams = zod.object({
+  userId: zod.coerce.string(),
+});
+
+export const adminSuspendUserBodyReasonMax = 500;
+
+export const AdminSuspendUserBody = zod.object({
+  reason: zod.string().max(adminSuspendUserBodyReasonMax).nullish(),
+});
+
+export const AdminSuspendUserResponse = zod.object({
+  user: zod.object({
+    userId: zod.string(),
+    handle: zod.string(),
+    email: zod.string().nullish(),
+    displayName: zod.string().nullish(),
+    avatarUrl: zod.string().nullish(),
+    isAdmin: zod.boolean(),
+    suspendedAt: zod.coerce.date().nullish(),
+    suspensionReason: zod.string().nullish(),
+    deletedAt: zod.coerce.date().nullish(),
+    listingCount: zod.number().optional(),
+    orderCount: zod.number().optional(),
+    createdAt: zod.coerce.date().nullish(),
+  }),
+  recentListings: zod.array(
+    zod.object({
+      id: zod.number(),
+      sessionId: zod.number(),
+      userId: zod.string(),
+      creatorHandle: zod.string(),
+      title: zod.string(),
+      category: zod.string(),
+      description: zod.string().optional(),
+      listingPrice: zod.number(),
+      status: zod.enum(["active", "hidden", "removed"]),
+      thumbnailUrl: zod.string().nullish(),
+      orderCount: zod.number(),
+      deletedAt: zod.coerce.date().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date().optional(),
+    }),
+  ),
+  recentOrders: zod.array(
+    zod.object({
+      id: zod.number(),
+      userId: zod.string(),
+      buyerHandle: zod.string().nullish(),
+      designerUserId: zod.string().nullish(),
+      designerHandle: zod.string().nullish(),
+      listingId: zod.number().nullish(),
+      listingTitle: zod.string().nullish(),
+      sessionTitle: zod.string().nullish(),
+      supplierName: zod.string(),
+      status: zod.enum([
+        "queued",
+        "in_production",
+        "quality_check",
+        "shipped",
+        "delivered",
+      ]),
+      paymentStatus: zod.enum([
+        "pending_payment",
+        "paid",
+        "failed",
+        "refunded",
+        "partially_refunded",
+      ]),
+      quantity: zod.number(),
+      totalCost: zod.number(),
+      refundedAmount: zod.number(),
+      adminNoteCount: zod.number().optional(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  recentReports: zod.array(
+    zod.object({
+      id: zod.number(),
+      reporterUserId: zod.string(),
+      reporterHandle: zod.string().nullish(),
+      targetType: zod.enum(["listing", "designer", "order"]),
+      targetId: zod.string(),
+      targetTitle: zod.string().nullish(),
+      reason: zod.enum([
+        "spam",
+        "ip_violation",
+        "prohibited_content",
+        "fraud",
+        "harassment",
+        "other",
+      ]),
+      notes: zod.string().nullish(),
+      status: zod.enum(["open", "reviewing", "resolved", "dismissed"]),
+      resolvedBy: zod.string().nullish(),
+      resolvedByHandle: zod.string().nullish(),
+      resolvedAt: zod.coerce.date().nullish(),
+      resolutionNotes: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+  auditLog: zod.array(
+    zod.object({
+      id: zod.number(),
+      actorUserId: zod.string().nullish(),
+      actorHandle: zod.string().nullish(),
+      action: zod.string(),
+      targetType: zod.string(),
+      targetId: zod.string(),
+      before: zod
+        .unknown()
+        .nullish()
+        .describe("Free-form JSON snapshot before the change."),
+      after: zod
+        .unknown()
+        .nullish()
+        .describe("Free-form JSON snapshot after the change."),
+      requestId: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Lift an existing suspension on a user account
+ */
+export const AdminUnsuspendUserParams = zod.object({
+  userId: zod.coerce.string(),
+});
+
+export const AdminUnsuspendUserResponse = zod.object({
+  user: zod.object({
+    userId: zod.string(),
+    handle: zod.string(),
+    email: zod.string().nullish(),
+    displayName: zod.string().nullish(),
+    avatarUrl: zod.string().nullish(),
+    isAdmin: zod.boolean(),
+    suspendedAt: zod.coerce.date().nullish(),
+    suspensionReason: zod.string().nullish(),
+    deletedAt: zod.coerce.date().nullish(),
+    listingCount: zod.number().optional(),
+    orderCount: zod.number().optional(),
+    createdAt: zod.coerce.date().nullish(),
+  }),
+  recentListings: zod.array(
+    zod.object({
+      id: zod.number(),
+      sessionId: zod.number(),
+      userId: zod.string(),
+      creatorHandle: zod.string(),
+      title: zod.string(),
+      category: zod.string(),
+      description: zod.string().optional(),
+      listingPrice: zod.number(),
+      status: zod.enum(["active", "hidden", "removed"]),
+      thumbnailUrl: zod.string().nullish(),
+      orderCount: zod.number(),
+      deletedAt: zod.coerce.date().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date().optional(),
+    }),
+  ),
+  recentOrders: zod.array(
+    zod.object({
+      id: zod.number(),
+      userId: zod.string(),
+      buyerHandle: zod.string().nullish(),
+      designerUserId: zod.string().nullish(),
+      designerHandle: zod.string().nullish(),
+      listingId: zod.number().nullish(),
+      listingTitle: zod.string().nullish(),
+      sessionTitle: zod.string().nullish(),
+      supplierName: zod.string(),
+      status: zod.enum([
+        "queued",
+        "in_production",
+        "quality_check",
+        "shipped",
+        "delivered",
+      ]),
+      paymentStatus: zod.enum([
+        "pending_payment",
+        "paid",
+        "failed",
+        "refunded",
+        "partially_refunded",
+      ]),
+      quantity: zod.number(),
+      totalCost: zod.number(),
+      refundedAmount: zod.number(),
+      adminNoteCount: zod.number().optional(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  recentReports: zod.array(
+    zod.object({
+      id: zod.number(),
+      reporterUserId: zod.string(),
+      reporterHandle: zod.string().nullish(),
+      targetType: zod.enum(["listing", "designer", "order"]),
+      targetId: zod.string(),
+      targetTitle: zod.string().nullish(),
+      reason: zod.enum([
+        "spam",
+        "ip_violation",
+        "prohibited_content",
+        "fraud",
+        "harassment",
+        "other",
+      ]),
+      notes: zod.string().nullish(),
+      status: zod.enum(["open", "reviewing", "resolved", "dismissed"]),
+      resolvedBy: zod.string().nullish(),
+      resolvedByHandle: zod.string().nullish(),
+      resolvedAt: zod.coerce.date().nullish(),
+      resolutionNotes: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+  auditLog: zod.array(
+    zod.object({
+      id: zod.number(),
+      actorUserId: zod.string().nullish(),
+      actorHandle: zod.string().nullish(),
+      action: zod.string(),
+      targetType: zod.string(),
+      targetId: zod.string(),
+      before: zod
+        .unknown()
+        .nullish()
+        .describe("Free-form JSON snapshot before the change."),
+      after: zod
+        .unknown()
+        .nullish()
+        .describe("Free-form JSON snapshot after the change."),
+      requestId: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary List user-submitted reports for triage
+ */
+export const adminListReportsQueryLimitDefault = 50;
+export const adminListReportsQueryLimitMax = 100;
+
+export const AdminListReportsQueryParams = zod.object({
+  status: zod
+    .enum(["open", "reviewing", "resolved", "dismissed", "all"])
+    .optional(),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(adminListReportsQueryLimitMax)
+    .default(adminListReportsQueryLimitDefault),
+});
+
+export const AdminListReportsResponseItem = zod.object({
+  id: zod.number(),
+  reporterUserId: zod.string(),
+  reporterHandle: zod.string().nullish(),
+  targetType: zod.enum(["listing", "designer", "order"]),
+  targetId: zod.string(),
+  targetTitle: zod.string().nullish(),
+  reason: zod.enum([
+    "spam",
+    "ip_violation",
+    "prohibited_content",
+    "fraud",
+    "harassment",
+    "other",
+  ]),
+  notes: zod.string().nullish(),
+  status: zod.enum(["open", "reviewing", "resolved", "dismissed"]),
+  resolvedBy: zod.string().nullish(),
+  resolvedByHandle: zod.string().nullish(),
+  resolvedAt: zod.coerce.date().nullish(),
+  resolutionNotes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const AdminListReportsResponse = zod.array(AdminListReportsResponseItem);
+
+/**
+ * @summary Update report status / resolution notes
+ */
+export const AdminUpdateReportParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const adminUpdateReportBodyResolutionNotesMax = 2000;
+
+export const AdminUpdateReportBody = zod.object({
+  status: zod.enum(["open", "reviewing", "resolved", "dismissed"]),
+  resolutionNotes: zod
+    .string()
+    .max(adminUpdateReportBodyResolutionNotesMax)
+    .nullish(),
+});
+
+export const AdminUpdateReportResponse = zod.object({
+  id: zod.number(),
+  reporterUserId: zod.string(),
+  reporterHandle: zod.string().nullish(),
+  targetType: zod.enum(["listing", "designer", "order"]),
+  targetId: zod.string(),
+  targetTitle: zod.string().nullish(),
+  reason: zod.enum([
+    "spam",
+    "ip_violation",
+    "prohibited_content",
+    "fraud",
+    "harassment",
+    "other",
+  ]),
+  notes: zod.string().nullish(),
+  status: zod.enum(["open", "reviewing", "resolved", "dismissed"]),
+  resolvedBy: zod.string().nullish(),
+  resolvedByHandle: zod.string().nullish(),
+  resolvedAt: zod.coerce.date().nullish(),
+  resolutionNotes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * Cheap, public-ish probe used by the SPA to decide whether to show
+the admin console link. Returns `{ isAdmin: false }` for guests
+and non-admins; `{ isAdmin: true }` only when the Clerk session
+carries `publicMetadata.role = admin`.
+
+ * @summary Returns whether the current caller is an admin
+ */
+export const GetAdminMeResponse = zod.object({
+  isAdmin: zod.boolean(),
+  userId: zod.string().nullish(),
 });
 
 /**

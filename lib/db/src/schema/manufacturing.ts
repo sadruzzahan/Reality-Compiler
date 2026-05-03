@@ -8,6 +8,7 @@ import {
   numeric,
   index,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { designSessionsTable } from "./designSessions";
 
 export const suppliersTable = pgTable("suppliers", {
@@ -104,6 +105,15 @@ export type OrderStatusEvent = {
   at: string;
 };
 
+export type AdminOrderNote = {
+  /** Clerk userId of the admin who left the note. */
+  by: string;
+  /** ISO-8601 timestamp. */
+  at: string;
+  /** Free-form note text (max 2000 chars enforced at the API layer). */
+  text: string;
+};
+
 export const ordersTable = pgTable(
   "orders",
   {
@@ -143,6 +153,15 @@ export const ordersTable = pgTable(
     refundedAmount: numeric("refunded_amount", { precision: 12, scale: 2 })
       .notNull()
       .default("0"),
+    /**
+     * Free-form notes left by admins on the order (refund context, support
+     * conversation summaries, etc). Append-only from the UI but technically
+     * a JSONB array so future shape tweaks don't need a migration.
+     */
+    adminNotes: jsonb("admin_notes")
+      .$type<AdminOrderNote[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

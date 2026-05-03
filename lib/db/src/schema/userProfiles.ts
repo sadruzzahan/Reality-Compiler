@@ -30,8 +30,17 @@ export const userProfilesTable = pgTable(
     // background job purges objects and hard-deletes affected rows after a
     // 30-day grace window.
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    // Admin-imposed suspension. When non-null, `requireAuth` short-circuits
+    // every API request from this user with a 403. Cleared by an admin via
+    // POST /admin/users/:id/unsuspend.
+    suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+    suspendedBy: text("suspended_by"),
+    suspensionReason: text("suspension_reason"),
   },
-  (t) => [index("user_profiles_deleted_at_idx").on(t.deletedAt)],
+  (t) => [
+    index("user_profiles_deleted_at_idx").on(t.deletedAt),
+    index("user_profiles_suspended_at_idx").on(t.suspendedAt),
+  ],
 );
 
 export type UserProfile = typeof userProfilesTable.$inferSelect;

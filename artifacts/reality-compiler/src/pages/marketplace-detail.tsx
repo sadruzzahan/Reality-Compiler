@@ -41,6 +41,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useDocumentHead } from "@/hooks/use-document-head";
+import { ReportDialog } from "@/components/report-dialog";
 
 export default function MarketplaceDetail() {
   const params = useParams();
@@ -233,13 +234,20 @@ export default function MarketplaceDetail() {
             <h1 className="text-3xl font-bold tracking-tight font-sans">
               {listing.title}
             </h1>
-            <Link
-              href={`/designers/${listing.userId}`}
-              className="text-sm text-primary hover:underline font-mono mt-1"
-              data-testid="link-designer"
-            >
-              by @{listing.creatorHandle}
-            </Link>
+            <div className="flex items-center justify-between gap-2 mt-1">
+              <Link
+                href={`/designers/${listing.userId}`}
+                className="text-sm text-primary hover:underline font-mono"
+                data-testid="link-designer"
+              >
+                by @{listing.creatorHandle}
+              </Link>
+              <ReportDialog
+                targetType="listing"
+                targetId={String(listing.id)}
+                targetLabel={`"${listing.title}"`}
+              />
+            </div>
             <p className="text-muted-foreground mt-4">{listing.description}</p>
 
             <div className="mt-6 p-4 rounded-xl bg-card border border-border/60">

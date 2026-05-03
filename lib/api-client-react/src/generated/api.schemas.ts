@@ -643,9 +643,400 @@ export interface OrderRefundResult {
   status?: string | null;
 }
 
+export type ReportTargetType =
+  (typeof ReportTargetType)[keyof typeof ReportTargetType];
+
+export const ReportTargetType = {
+  listing: "listing",
+  designer: "designer",
+  order: "order",
+} as const;
+
+export type ReportReason = (typeof ReportReason)[keyof typeof ReportReason];
+
+export const ReportReason = {
+  spam: "spam",
+  ip_violation: "ip_violation",
+  prohibited_content: "prohibited_content",
+  fraud: "fraud",
+  harassment: "harassment",
+  other: "other",
+} as const;
+
+export type ReportStatus = (typeof ReportStatus)[keyof typeof ReportStatus];
+
+export const ReportStatus = {
+  open: "open",
+  reviewing: "reviewing",
+  resolved: "resolved",
+  dismissed: "dismissed",
+} as const;
+
+export interface CreateReportInput {
+  targetType: ReportTargetType;
+  /**
+   * String form of the target id. For `listing` and `order` this
+is the numeric id stringified; for `designer` it's the Clerk
+userId.
+
+   * @maxLength 128
+   */
+  targetId: string;
+  reason: ReportReason;
+  /**
+   * @maxLength 2000
+   * @nullable
+   */
+  notes?: string | null;
+}
+
+export interface Report {
+  id: number;
+  reporterUserId: string;
+  targetType: ReportTargetType;
+  targetId: string;
+  reason: ReportReason;
+  /** @nullable */
+  notes?: string | null;
+  status: ReportStatus;
+  /** @nullable */
+  resolvedBy?: string | null;
+  /** @nullable */
+  resolvedAt?: string | null;
+  /** @nullable */
+  resolutionNotes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminMe {
+  isAdmin: boolean;
+  /** @nullable */
+  userId?: string | null;
+}
+
+export interface AdminDashboard {
+  openReports: number;
+  activeListings: number;
+  hiddenListings: number;
+  removedListings: number;
+  ordersAwaitingPayment: number;
+  ordersInProgress: number;
+  suspendedUsers: number;
+  last24hOrders: number;
+  last24hReports: number;
+}
+
+export type AdminListingRowStatus =
+  (typeof AdminListingRowStatus)[keyof typeof AdminListingRowStatus];
+
+export const AdminListingRowStatus = {
+  active: "active",
+  hidden: "hidden",
+  removed: "removed",
+} as const;
+
+export interface AdminListingRow {
+  id: number;
+  sessionId: number;
+  userId: string;
+  creatorHandle: string;
+  title: string;
+  category: string;
+  description?: string;
+  listingPrice: number;
+  status: AdminListingRowStatus;
+  /** @nullable */
+  thumbnailUrl?: string | null;
+  orderCount: number;
+  /** @nullable */
+  deletedAt?: string | null;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export type AdminListingPatchAction =
+  (typeof AdminListingPatchAction)[keyof typeof AdminListingPatchAction];
+
+export const AdminListingPatchAction = {
+  hide: "hide",
+  restore: "restore",
+  remove: "remove",
+} as const;
+
+export interface AdminListingPatch {
+  action: AdminListingPatchAction;
+  /**
+   * @maxLength 500
+   * @nullable
+   */
+  reason?: string | null;
+}
+
+export type AdminOrderRowStatus =
+  (typeof AdminOrderRowStatus)[keyof typeof AdminOrderRowStatus];
+
+export const AdminOrderRowStatus = {
+  queued: "queued",
+  in_production: "in_production",
+  quality_check: "quality_check",
+  shipped: "shipped",
+  delivered: "delivered",
+} as const;
+
+export interface AdminOrderRow {
+  id: number;
+  userId: string;
+  /** @nullable */
+  buyerHandle?: string | null;
+  /** @nullable */
+  designerUserId?: string | null;
+  /** @nullable */
+  designerHandle?: string | null;
+  /** @nullable */
+  listingId?: number | null;
+  /** @nullable */
+  listingTitle?: string | null;
+  /** @nullable */
+  sessionTitle?: string | null;
+  supplierName: string;
+  status: AdminOrderRowStatus;
+  paymentStatus: PaymentStatus;
+  quantity: number;
+  totalCost: number;
+  refundedAmount: number;
+  adminNoteCount?: number;
+  createdAt: string;
+}
+
+export interface AdminOrderNoteEntry {
+  by: string;
+  at: string;
+  text: string;
+  /** @nullable */
+  byHandle?: string | null;
+}
+
+export interface AdminAuditEntry {
+  id: number;
+  /** @nullable */
+  actorUserId?: string | null;
+  /** @nullable */
+  actorHandle?: string | null;
+  action: string;
+  targetType: string;
+  targetId: string;
+  /** Free-form JSON snapshot before the change. */
+  before?: unknown | null;
+  /** Free-form JSON snapshot after the change. */
+  after?: unknown | null;
+  /** @nullable */
+  requestId?: string | null;
+  createdAt: string;
+}
+
+export interface AdminOrderDetail {
+  order: Order;
+  userId?: string;
+  /** @nullable */
+  buyerHandle?: string | null;
+  /** @nullable */
+  designerHandle?: string | null;
+  /** @nullable */
+  listingId?: number | null;
+  /** @nullable */
+  listingTitle?: string | null;
+  adminNotes: AdminOrderNoteEntry[];
+  auditLog: AdminAuditEntry[];
+}
+
+export interface AdminOrderNoteInput {
+  /**
+   * @minLength 1
+   * @maxLength 2000
+   */
+  text: string;
+}
+
+export interface AdminUserRow {
+  userId: string;
+  handle: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  displayName?: string | null;
+  /** @nullable */
+  avatarUrl?: string | null;
+  isAdmin: boolean;
+  /** @nullable */
+  suspendedAt?: string | null;
+  /** @nullable */
+  suspensionReason?: string | null;
+  /** @nullable */
+  deletedAt?: string | null;
+  listingCount?: number;
+  orderCount?: number;
+  /** @nullable */
+  createdAt?: string | null;
+}
+
+export interface AdminReportRow {
+  id: number;
+  reporterUserId: string;
+  /** @nullable */
+  reporterHandle?: string | null;
+  targetType: ReportTargetType;
+  targetId: string;
+  /** @nullable */
+  targetTitle?: string | null;
+  reason: ReportReason;
+  /** @nullable */
+  notes?: string | null;
+  status: ReportStatus;
+  /** @nullable */
+  resolvedBy?: string | null;
+  /** @nullable */
+  resolvedByHandle?: string | null;
+  /** @nullable */
+  resolvedAt?: string | null;
+  /** @nullable */
+  resolutionNotes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminUserDetail {
+  user: AdminUserRow;
+  recentListings: AdminListingRow[];
+  recentOrders: AdminOrderRow[];
+  recentReports: AdminReportRow[];
+  auditLog: AdminAuditEntry[];
+}
+
+export interface AdminSuspendInput {
+  /**
+   * @maxLength 500
+   * @nullable
+   */
+  reason?: string | null;
+}
+
+export interface AdminReportPatch {
+  status: ReportStatus;
+  /**
+   * @maxLength 2000
+   * @nullable
+   */
+  resolutionNotes?: string | null;
+}
+
 export type ListSuppliersParams = {
   capability?: string;
 };
+
+export type AdminListListingsParams = {
+  status?: AdminListListingsStatus;
+  /**
+   * @maxLength 200
+   */
+  q?: string;
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  limit?: number;
+};
+
+export type AdminListListingsStatus =
+  (typeof AdminListListingsStatus)[keyof typeof AdminListListingsStatus];
+
+export const AdminListListingsStatus = {
+  active: "active",
+  hidden: "hidden",
+  removed: "removed",
+  all: "all",
+} as const;
+
+export type AdminListOrdersParams = {
+  status?: AdminListOrdersStatus;
+  paymentStatus?: AdminListOrdersPaymentStatus;
+  /**
+   * @maxLength 200
+   */
+  q?: string;
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  limit?: number;
+};
+
+export type AdminListOrdersStatus =
+  (typeof AdminListOrdersStatus)[keyof typeof AdminListOrdersStatus];
+
+export const AdminListOrdersStatus = {
+  queued: "queued",
+  in_production: "in_production",
+  quality_check: "quality_check",
+  shipped: "shipped",
+  delivered: "delivered",
+  all: "all",
+} as const;
+
+export type AdminListOrdersPaymentStatus =
+  (typeof AdminListOrdersPaymentStatus)[keyof typeof AdminListOrdersPaymentStatus];
+
+export const AdminListOrdersPaymentStatus = {
+  pending_payment: "pending_payment",
+  paid: "paid",
+  failed: "failed",
+  refunded: "refunded",
+  partially_refunded: "partially_refunded",
+  all: "all",
+} as const;
+
+export type AdminListUsersParams = {
+  /**
+   * @maxLength 200
+   */
+  q?: string;
+  status?: AdminListUsersStatus;
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  limit?: number;
+};
+
+export type AdminListUsersStatus =
+  (typeof AdminListUsersStatus)[keyof typeof AdminListUsersStatus];
+
+export const AdminListUsersStatus = {
+  all: "all",
+  active: "active",
+  suspended: "suspended",
+  deleted: "deleted",
+} as const;
+
+export type AdminListReportsParams = {
+  status?: AdminListReportsStatus;
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  limit?: number;
+};
+
+export type AdminListReportsStatus =
+  (typeof AdminListReportsStatus)[keyof typeof AdminListReportsStatus];
+
+export const AdminListReportsStatus = {
+  open: "open",
+  reviewing: "reviewing",
+  resolved: "resolved",
+  dismissed: "dismissed",
+  all: "all",
+} as const;
 
 export type ListMarketplaceListingsParams = {
   /**

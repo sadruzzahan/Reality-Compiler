@@ -9,8 +9,10 @@ import {
   Banknote,
   CircleDollarSign,
   LogOut,
+  ShieldCheck,
 } from "lucide-react";
 import { Show, useUser, useClerk } from "@clerk/react";
+import { useIsAdmin } from "@/hooks/use-is-admin";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -26,6 +28,7 @@ function UserMenu() {
   const { user } = useUser();
   const { signOut } = useClerk();
   const [, setLocation] = useLocation();
+  const { isAdmin } = useIsAdmin();
   if (!user) return null;
   const initial =
     user.firstName?.[0]?.toUpperCase() ??
@@ -80,6 +83,18 @@ function UserMenu() {
         >
           Designer payouts
         </DropdownMenuItem>
+        {isAdmin && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => setLocation("/admin")}
+              data-testid="link-admin-console"
+            >
+              <ShieldCheck className="mr-2 h-4 w-4" />
+              Admin console
+            </DropdownMenuItem>
+          </>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={() => signOut({ redirectUrl: "/" })}
