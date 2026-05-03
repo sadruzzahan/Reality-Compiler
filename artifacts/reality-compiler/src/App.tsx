@@ -28,6 +28,7 @@ import SessionWorkspace from "@/pages/session-workspace";
 import Suppliers from "@/pages/suppliers";
 import Orders from "@/pages/orders";
 import OrderDetail from "@/pages/order-detail";
+import Payouts from "@/pages/payouts";
 import About from "@/pages/about";
 import Marketplace from "@/pages/marketplace";
 import MarketplaceDetail from "@/pages/marketplace-detail";
@@ -198,6 +199,11 @@ function AppShell() {
           <Route path="/orders/:id">
             <RequireAuth>
               <OrderDetail />
+            </RequireAuth>
+          </Route>
+          <Route path="/payouts">
+            <RequireAuth>
+              <Payouts />
             </RequireAuth>
           </Route>
           <Route component={NotFound} />

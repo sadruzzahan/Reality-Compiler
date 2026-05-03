@@ -21,6 +21,7 @@ import type {
   DesignMessage,
   DesignSession,
   DesignSessionSummary,
+  DesignerOrderSummary,
   DesignerProfile,
   ErrorResponse,
   HealthStatus,
@@ -1296,6 +1297,81 @@ export function useGetOrder<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetOrderQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List orders placed against the authenticated user's published designs
+ */
+export const getListDesignerOrdersUrl = () => {
+  return `/api/designer/orders`;
+};
+
+export const listDesignerOrders = async (
+  options?: RequestInit,
+): Promise<DesignerOrderSummary[]> => {
+  return customFetch<DesignerOrderSummary[]>(getListDesignerOrdersUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListDesignerOrdersQueryKey = () => {
+  return [`/api/designer/orders`] as const;
+};
+
+export const getListDesignerOrdersQueryOptions = <
+  TData = Awaited<ReturnType<typeof listDesignerOrders>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listDesignerOrders>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListDesignerOrdersQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listDesignerOrders>>
+  > = ({ signal }) => listDesignerOrders({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listDesignerOrders>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListDesignerOrdersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listDesignerOrders>>
+>;
+export type ListDesignerOrdersQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary List orders placed against the authenticated user's published designs
+ */
+
+export function useListDesignerOrders<
+  TData = Awaited<ReturnType<typeof listDesignerOrders>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listDesignerOrders>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListDesignerOrdersQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

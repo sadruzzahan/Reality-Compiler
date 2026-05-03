@@ -317,6 +317,7 @@ export interface DesignerProfile {
   listings: MarketplaceListingSummary[];
   totalListings: number;
   totalOrders: number;
+  totalPayouts: number;
 }
 
 export type OrderStatusEventStatus =
@@ -357,6 +358,41 @@ export interface OrderSummary {
   status: OrderSummaryStatus;
   quantity: number;
   totalCost: number;
+  payoutAmount: number;
+  /** @nullable */
+  designerUserId?: string | null;
+  leadTimeDays: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type DesignerOrderSummaryStatus =
+  (typeof DesignerOrderSummaryStatus)[keyof typeof DesignerOrderSummaryStatus];
+
+export const DesignerOrderSummaryStatus = {
+  queued: "queued",
+  in_production: "in_production",
+  quality_check: "quality_check",
+  shipped: "shipped",
+  delivered: "delivered",
+} as const;
+
+export interface DesignerOrderSummary {
+  id: number;
+  sessionId: number;
+  sessionTitle: string;
+  /** @nullable */
+  productName?: string | null;
+  listingId: number;
+  listingTitle: string;
+  listingDeleted: boolean;
+  /** @nullable */
+  buyerHandle?: string | null;
+  supplierName: string;
+  status: DesignerOrderSummaryStatus;
+  quantity: number;
+  totalCost: number;
+  payoutAmount: number;
   leadTimeDays: number;
   createdAt: string;
   updatedAt: string;
@@ -382,6 +418,9 @@ export interface Order {
   supplier: Supplier;
   quantity: number;
   totalCost: number;
+  payoutAmount: number;
+  /** @nullable */
+  designerUserId?: string | null;
   leadTimeDays: number;
   shippingAddress: ShippingAddress;
   status: OrderStatus;

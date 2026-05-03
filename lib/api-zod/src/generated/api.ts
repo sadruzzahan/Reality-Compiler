@@ -355,6 +355,8 @@ export const ListOrdersResponseItem = zod.object({
   ]),
   quantity: zod.number(),
   totalCost: zod.number(),
+  payoutAmount: zod.number(),
+  designerUserId: zod.string().nullish(),
   leadTimeDays: zod.number(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
@@ -455,6 +457,8 @@ export const GetOrderResponse = zod.object({
   }),
   quantity: zod.number(),
   totalCost: zod.number(),
+  payoutAmount: zod.number(),
+  designerUserId: zod.string().nullish(),
   leadTimeDays: zod.number(),
   shippingAddress: zod.object({
     recipient: zod.string(),
@@ -488,6 +492,37 @@ export const GetOrderResponse = zod.object({
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
+
+/**
+ * @summary List orders placed against the authenticated user's published designs
+ */
+export const ListDesignerOrdersResponseItem = zod.object({
+  id: zod.number(),
+  sessionId: zod.number(),
+  sessionTitle: zod.string(),
+  productName: zod.string().nullish(),
+  listingId: zod.number(),
+  listingTitle: zod.string(),
+  listingDeleted: zod.boolean(),
+  buyerHandle: zod.string().nullish(),
+  supplierName: zod.string(),
+  status: zod.enum([
+    "queued",
+    "in_production",
+    "quality_check",
+    "shipped",
+    "delivered",
+  ]),
+  quantity: zod.number(),
+  totalCost: zod.number(),
+  payoutAmount: zod.number(),
+  leadTimeDays: zod.number(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListDesignerOrdersResponse = zod.array(
+  ListDesignerOrdersResponseItem,
+);
 
 /**
  * @summary Advance the order to the next manufacturing status
@@ -564,6 +599,8 @@ export const AdvanceOrderResponse = zod.object({
   }),
   quantity: zod.number(),
   totalCost: zod.number(),
+  payoutAmount: zod.number(),
+  designerUserId: zod.string().nullish(),
   leadTimeDays: zod.number(),
   shippingAddress: zod.object({
     recipient: zod.string(),
@@ -818,4 +855,5 @@ export const GetDesignerProfileResponse = zod.object({
   ),
   totalListings: zod.number(),
   totalOrders: zod.number(),
+  totalPayouts: zod.number(),
 });

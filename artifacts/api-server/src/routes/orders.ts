@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, inArray } from "drizzle-orm";
+import { clerkClient } from "@clerk/express";
 import {
   db,
   ordersTable,
@@ -21,6 +22,7 @@ import {
 } from "@workspace/api-zod";
 import { serializeSupplier } from "./suppliers";
 import { requireAuth } from "../middlewares/auth";
+import { handleForUser } from "../lib/handles";
 
 const router: IRouter = Router();
 
@@ -102,6 +104,8 @@ async function serializeOrder(order: OrderRow) {
     supplier: serializeSupplier(order.supplier),
     quantity: order.quantity,
     totalCost: Number(order.totalCost),
+    payoutAmount: Number(order.payoutAmount),
+    designerUserId: order.designerUserId,
     leadTimeDays: order.leadTimeDays,
     shippingAddress: order.shippingAddress,
     status: order.status as OrderStatus,
@@ -144,6 +148,8 @@ router.get("/orders", requireAuth, async (req, res): Promise<void> => {
         status: r.order.status as OrderStatus,
         quantity: r.order.quantity,
         totalCost: Number(r.order.totalCost),
+        payoutAmount: Number(r.order.payoutAmount),
+        designerUserId: r.order.designerUserId,
         leadTimeDays: r.order.leadTimeDays,
         createdAt: r.order.createdAt.toISOString(),
         updatedAt: r.order.updatedAt.toISOString(),
@@ -152,6 +158,133 @@ router.get("/orders", requireAuth, async (req, res): Promise<void> => {
   );
   res.json(summaries);
 });
+
+router.get(
+  "/designer/orders",
+  requireAuth,
+  async (req, res): Promise<void> => {
+    const userId = req.userId!;
+
+    // Query by designerUserId so historical payouts survive even when a
+    // listing has since been unpublished/deleted.
+    const rows = await db
+      .select({
+        order: ordersTable,
+        supplier: suppliersTable,
+        session: designSessionsTable,
+      })
+      .from(ordersTable)
+      .innerJoin(
+        suppliersTable,
+        eq(suppliersTable.id, ordersTable.supplierId),
+      )
+      .innerJoin(
+        designSessionsTable,
+        eq(designSessionsTable.id, ordersTable.sessionId),
+      )
+      .where(eq(ordersTable.designerUserId, userId))
+      .orderBy(desc(ordersTable.createdAt));
+
+    if (rows.length === 0) {
+      res.json([]);
+      return;
+    }
+
+    // Preload listings (may include nulls for deleted ones).
+    const listingIds = Array.from(
+      new Set(
+        rows
+          .map((r) => r.order.marketplaceListingId)
+          .filter((id): id is number => id != null),
+      ),
+    );
+    const listingById = new Map<
+      number,
+      typeof marketplaceListingsTable.$inferSelect
+    >();
+    if (listingIds.length > 0) {
+      const listings = await db
+        .select()
+        .from(marketplaceListingsTable)
+        .where(inArray(marketplaceListingsTable.id, listingIds));
+      for (const l of listings) listingById.set(l.id, l);
+    }
+
+    // Preload latest design output per session in one query (no N+1).
+    const sessionIds = Array.from(new Set(rows.map((r) => r.session.id)));
+    const outputs = await db
+      .select({
+        sessionId: designOutputsTable.sessionId,
+        productName: designOutputsTable.productName,
+        createdAt: designOutputsTable.createdAt,
+      })
+      .from(designOutputsTable)
+      .where(inArray(designOutputsTable.sessionId, sessionIds))
+      .orderBy(desc(designOutputsTable.createdAt));
+    const productNameBySession = new Map<number, string>();
+    for (const o of outputs) {
+      if (!productNameBySession.has(o.sessionId)) {
+        productNameBySession.set(o.sessionId, o.productName);
+      }
+    }
+
+    // Resolve buyer handles in batch.
+    const buyerIds = Array.from(new Set(rows.map((r) => r.order.userId)));
+    const buyerHandleById = new Map<string, string | null>();
+    await Promise.all(
+      buyerIds.map(async (id) => {
+        if (id === "system-seed" || id === userId) {
+          buyerHandleById.set(id, null);
+          return;
+        }
+        try {
+          const u = await clerkClient.users.getUser(id);
+          const email =
+            u.primaryEmailAddress?.emailAddress ??
+            u.emailAddresses[0]?.emailAddress ??
+            null;
+          buyerHandleById.set(
+            id,
+            handleForUser(id, email, u.username ?? null, u.firstName),
+          );
+        } catch {
+          buyerHandleById.set(id, handleForUser(id, null, null, null));
+        }
+      }),
+    );
+
+    const summaries = rows.map((r) => {
+      const listing =
+        r.order.marketplaceListingId != null
+          ? listingById.get(r.order.marketplaceListingId) ?? null
+          : null;
+      // When the listing has been deleted, we still report the original
+      // marketplace listing id (so historical payout rows render) but flag
+      // it via `listingDeleted` so the UI can suppress the dead link.
+      const listingDeleted =
+        r.order.marketplaceListingId != null && listing == null;
+      return {
+        id: r.order.id,
+        sessionId: r.order.sessionId,
+        sessionTitle: r.session.title,
+        productName: productNameBySession.get(r.session.id) ?? null,
+        listingId: r.order.marketplaceListingId ?? 0,
+        listingTitle: listing?.title ?? r.session.title,
+        listingDeleted,
+        buyerHandle: buyerHandleById.get(r.order.userId) ?? null,
+        supplierName: r.supplier.name,
+        status: r.order.status as OrderStatus,
+        quantity: r.order.quantity,
+        totalCost: Number(r.order.totalCost),
+        payoutAmount: Number(r.order.payoutAmount),
+        leadTimeDays: r.order.leadTimeDays,
+        createdAt: r.order.createdAt.toISOString(),
+        updatedAt: r.order.updatedAt.toISOString(),
+      };
+    });
+    res.json(summaries);
+  },
+);
 
 router.post("/orders", requireAuth, async (req, res): Promise<void> => {
   const body = PlaceOrderBody.safeParse(req.body);
@@ -178,20 +311,30 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  // Authorize: the requester must either own the underlying session, or be
-  // ordering against a published marketplace listing for this session.
-  let authorized = row.session.userId === req.userId;
-  if (!authorized && body.data.marketplaceListingId != null) {
-    const [listing] = await db
+  // Resolve and validate the marketplace listing if one was provided.
+  // The listing must reference this quote's session and be active —
+  // regardless of whether the requester also owns the session — so that
+  // payout attribution always points to the correct designer.
+  let listing: typeof marketplaceListingsTable.$inferSelect | null = null;
+  if (body.data.marketplaceListingId != null) {
+    const [found] = await db
       .select()
       .from(marketplaceListingsTable)
       .where(eq(marketplaceListingsTable.id, body.data.marketplaceListingId));
-    authorized = Boolean(
-      listing &&
-        listing.sessionId === row.quote.sessionId &&
-        listing.status === "active",
-    );
+    if (
+      !found ||
+      found.sessionId !== row.quote.sessionId ||
+      found.status !== "active"
+    ) {
+      res.status(404).json({ error: "Listing not found" });
+      return;
+    }
+    listing = found;
   }
+
+  // Authorize: requester must either own the underlying session, or be
+  // ordering against a (validated) published marketplace listing for it.
+  const authorized = row.session.userId === req.userId || listing !== null;
   if (!authorized) {
     res.status(404).json({ error: "Quote not found" });
     return;
@@ -201,6 +344,21 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
   const unitCost = Number(row.quote.unitCost);
   const setupFee = Number(row.quote.setupFee);
   const totalCost = Math.round((unitCost * quantity + setupFee) * 100) / 100;
+
+  // Compute the designer payout. Payouts are only owed when the buyer is
+  // ordering against another designer's published listing — never when the
+  // designer orders their own session/listing.
+  let payoutAmount = 0;
+  let designerUserId: string | null = null;
+  if (
+    listing &&
+    listing.status === "active" &&
+    listing.userId !== req.userId
+  ) {
+    designerUserId = listing.userId;
+    payoutAmount =
+      Math.round(Number(listing.listingPrice) * quantity * 100) / 100;
+  }
   const now = new Date();
   const initialEvent: OrderStatusEvent = {
     status: "queued",
@@ -218,6 +376,8 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
       supplierId: row.supplier.id,
       quantity,
       totalCost: String(totalCost),
+      designerUserId,
+      payoutAmount: String(payoutAmount),
       leadTimeDays: row.quote.leadTimeDays,
       shippingAddress: body.data.shippingAddress,
       status: "queued",

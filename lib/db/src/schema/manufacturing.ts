@@ -109,6 +109,10 @@ export const ordersTable = pgTable("orders", {
     .references(() => suppliersTable.id, { onDelete: "restrict" }),
   quantity: integer("quantity").notNull().default(1),
   totalCost: numeric("total_cost", { precision: 12, scale: 2 }).notNull(),
+  designerUserId: text("designer_user_id"),
+  payoutAmount: numeric("payout_amount", { precision: 12, scale: 2 })
+    .notNull()
+    .default("0"),
   leadTimeDays: integer("lead_time_days").notNull(),
   shippingAddress: jsonb("shipping_address").$type<ShippingAddress>().notNull(),
   status: text("status").notNull().default("queued"),

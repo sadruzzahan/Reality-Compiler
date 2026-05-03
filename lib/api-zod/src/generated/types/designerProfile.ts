@@ -19,4 +19,5 @@ export interface DesignerProfile {
   listings: MarketplaceListingSummary[];
   totalListings: number;
   totalOrders: number;
+  totalPayouts: number;
 }

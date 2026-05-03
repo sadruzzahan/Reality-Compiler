@@ -424,6 +424,12 @@ router.get(
       listings.map((l) => buildSummary(l, profile)),
     );
     const totalOrders = summaries.reduce((sum, s) => sum + s.orderCount, 0);
+    const [{ payouts: totalPayouts }] = await db
+      .select({
+        payouts: sql<string>`coalesce(sum(${ordersTable.payoutAmount}), 0)::text`,
+      })
+      .from(ordersTable)
+      .where(eq(ordersTable.designerUserId, targetUserId));
     const handle =
       listings[0]?.creatorHandle ?? (await resolveHandle(targetUserId));
 
@@ -436,6 +442,7 @@ router.get(
       listings: summaries,
       totalListings: summaries.length,
       totalOrders,
+      totalPayouts: Number(totalPayouts ?? 0),
     });
   },
 );

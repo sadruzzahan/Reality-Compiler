@@ -6,6 +6,7 @@ import {
   Factory,
   Truck,
   Store,
+  Banknote,
   LogOut,
 } from "lucide-react";
 import { Show, useUser, useClerk } from "@clerk/react";
@@ -72,6 +73,12 @@ function UserMenu() {
         <DropdownMenuItem onSelect={() => setLocation("/orders")}>
           My orders
         </DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={() => setLocation("/payouts")}
+          data-testid="link-menu-payouts"
+        >
+          Designer payouts
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={() => signOut({ redirectUrl: "/" })}
@@ -121,6 +128,14 @@ export function Navbar() {
               >
                 <Truck className="w-4 h-4" />
                 Orders
+              </Link>
+              <Link
+                href="/payouts"
+                className="transition-colors hover:text-foreground/80 text-foreground/60 flex items-center gap-2"
+                data-testid="link-payouts"
+              >
+                <Banknote className="w-4 h-4" />
+                Payouts
               </Link>
             </Show>
             <Link

@@ -341,6 +341,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /designer/orders:
+    get:
+      operationId: listDesignerOrders
+      tags: [orders]
+      summary: List orders placed against the authenticated user's published designs
+      responses:
+        "200":
+          description: Designer orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DesignerOrderSummary"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /orders/{id}/advance:
     post:
       operationId: advanceOrder
@@ -1192,12 +1213,15 @@ components:
           type: integer
         totalOrders:
           type: integer
+        totalPayouts:
+          type: number
       required:
         - userId
         - handle
         - listings
         - totalListings
         - totalOrders
+        - totalPayouts
 
     OrderStatusEvent:
       type: object
@@ -1235,6 +1259,10 @@ components:
           type: integer
         totalCost:
           type: number
+        payoutAmount:
+          type: number
+        designerUserId:
+          type: ["string", "null"]
         leadTimeDays:
           type: integer
         createdAt:
@@ -1251,6 +1279,61 @@ components:
         - status
         - quantity
         - totalCost
+        - payoutAmount
+        - leadTimeDays
+        - createdAt
+        - updatedAt
+
+    DesignerOrderSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+        sessionTitle:
+          type: string
+        productName:
+          type: ["string", "null"]
+        listingId:
+          type: integer
+        listingTitle:
+          type: string
+        listingDeleted:
+          type: boolean
+        buyerHandle:
+          type: ["string", "null"]
+        supplierName:
+          type: string
+        status:
+          type: string
+          enum: [queued, in_production, quality_check, shipped, delivered]
+        quantity:
+          type: integer
+        totalCost:
+          type: number
+        payoutAmount:
+          type: number
+        leadTimeDays:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - sessionId
+        - sessionTitle
+        - listingId
+        - listingTitle
+        - listingDeleted
+        - supplierName
+        - status
+        - quantity
+        - totalCost
+        - payoutAmount
         - leadTimeDays
         - createdAt
         - updatedAt
@@ -1274,6 +1357,10 @@ components:
           type: integer
         totalCost:
           type: number
+        payoutAmount:
+          type: number
+        designerUserId:
+          type: ["string", "null"]
         leadTimeDays:
           type: integer
         shippingAddress:
@@ -1299,6 +1386,7 @@ components:
         - supplier
         - quantity
         - totalCost
+        - payoutAmount
         - leadTimeDays
         - shippingAddress
         - status

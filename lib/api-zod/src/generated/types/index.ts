@@ -10,6 +10,8 @@ export * from "./bomItem";
 export * from "./categoryCount";
 export * from "./costEstimate";
 export * from "./createSessionInput";
+export * from "./designerOrderSummary";
+export * from "./designerOrderSummaryStatus";
 export * from "./designerProfile";
 export * from "./designMessage";
 export * from "./designMessageRole";

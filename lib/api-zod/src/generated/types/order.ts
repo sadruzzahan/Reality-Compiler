@@ -21,6 +21,9 @@ export interface Order {
   supplier: Supplier;
   quantity: number;
   totalCost: number;
+  payoutAmount: number;
+  /** @nullable */
+  designerUserId?: string | null;
   leadTimeDays: number;
   shippingAddress: ShippingAddress;
   status: OrderStatus;

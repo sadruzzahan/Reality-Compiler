@@ -5,21 +5,24 @@
  * Reality Compiler API
  * OpenAPI spec version: 0.1.0
  */
-import type { OrderSummaryStatus } from "./orderSummaryStatus";
+import type { DesignerOrderSummaryStatus } from "./designerOrderSummaryStatus";
 
-export interface OrderSummary {
+export interface DesignerOrderSummary {
   id: number;
   sessionId: number;
   sessionTitle: string;
   /** @nullable */
   productName?: string | null;
+  listingId: number;
+  listingTitle: string;
+  listingDeleted: boolean;
+  /** @nullable */
+  buyerHandle?: string | null;
   supplierName: string;
-  status: OrderSummaryStatus;
+  status: DesignerOrderSummaryStatus;
   quantity: number;
   totalCost: number;
   payoutAmount: number;
-  /** @nullable */
-  designerUserId?: string | null;
   leadTimeDays: number;
   createdAt: Date;
   updatedAt: Date;
