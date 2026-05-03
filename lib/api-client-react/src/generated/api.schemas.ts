@@ -267,25 +267,6 @@ Set to `null` to clear the avatar.
   avatarUrl?: string | null;
 }
 
-export type UploadAvatarInputContentType =
-  (typeof UploadAvatarInputContentType)[keyof typeof UploadAvatarInputContentType];
-
-export const UploadAvatarInputContentType = {
-  "image/png": "image/png",
-  "image/jpeg": "image/jpeg",
-  "image/webp": "image/webp",
-} as const;
-
-export interface UploadAvatarInput {
-  contentType: UploadAvatarInputContentType;
-  /**
-   * Base64-encoded image bytes (no `data:` prefix). Max 4 MB decoded.
-   * @minLength 1
-   * @maxLength 7000000
-   */
-  dataBase64: string;
-}
-
 export interface PublishListingInput {
   sessionId: number;
   title: string;

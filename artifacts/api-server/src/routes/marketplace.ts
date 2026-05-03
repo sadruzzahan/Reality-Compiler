@@ -27,6 +27,7 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
 import { handleForUser } from "../lib/handles";
+import { deleteObjectByUrl } from "../lib/objectStorage";
 import { asyncHandler } from "../middlewares/asyncHandler";
 import { parseOrThrow } from "../middlewares/validate";
 import { mutateLimiter } from "../middlewares/rateLimits";
@@ -440,6 +441,29 @@ router.delete(
         updatedAt: new Date(),
       })
       .where(eq(marketplaceListingsTable.id, listing.id));
+    // Best-effort orphan cleanup: the underlying session normally retains
+    // ownership of the concept image, but if the session itself is already
+    // soft-deleted then the image is unreachable and safe to drop.
+    try {
+      const [session] = await db
+        .select({
+          deletedAt: designSessionsTable.deletedAt,
+        })
+        .from(designSessionsTable)
+        .where(eq(designSessionsTable.id, listing.sessionId));
+      if (session?.deletedAt) {
+        const outs = await db
+          .select({ imageUrl: designOutputsTable.imageUrl })
+          .from(designOutputsTable)
+          .where(eq(designOutputsTable.sessionId, listing.sessionId));
+        await Promise.all(outs.map((o) => deleteObjectByUrl(o.imageUrl)));
+      }
+    } catch (err) {
+      req.log.warn(
+        { err, listingId: listing.id },
+        "Failed to enqueue object deletion for unpublished listing",
+      );
+    }
     await recordAudit({
       actorUserId: req.userId!,
       action: "listing.unpublish",

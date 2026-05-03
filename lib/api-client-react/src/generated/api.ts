@@ -39,7 +39,6 @@ import type {
   SessionStats,
   Supplier,
   UpdateMyProfileInput,
-  UploadAvatarInput,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -1529,9 +1528,11 @@ export function useGetMe<
 }
 
 /**
- * Accepts a base64-encoded image (PNG, JPEG, or WebP, max 4 MB) and
-stores it in object storage. Returns the updated user profile with
-a hosted `avatarUrl`.
+ * Streams an image (PNG, JPEG, or WebP, max 4 MB) directly into
+object storage; the request body is the raw image bytes and the
+`Content-Type` header selects the image type. Returns the updated
+user profile with a hosted `avatarUrl`. The previous avatar
+object is deleted best-effort after a successful upload.
 
  * @summary Upload a new profile avatar image
  */
@@ -1540,14 +1541,14 @@ export const getUploadAvatarUrl = () => {
 };
 
 export const uploadAvatar = async (
-  uploadAvatarInput: UploadAvatarInput,
+  uploadAvatarBody: Blob,
   options?: RequestInit,
 ): Promise<Me> => {
   return customFetch<Me>(getUploadAvatarUrl(), {
     ...options,
     method: "POST",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(uploadAvatarInput),
+    headers: { "Content-Type": "image/png", ...options?.headers },
+    body: JSON.stringify(uploadAvatarBody),
   });
 };
 
@@ -1558,14 +1559,14 @@ export const getUploadAvatarMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof uploadAvatar>>,
     TError,
-    { data: BodyType<UploadAvatarInput> },
+    { data: BodyType<Blob> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof uploadAvatar>>,
   TError,
-  { data: BodyType<UploadAvatarInput> },
+  { data: BodyType<Blob> },
   TContext
 > => {
   const mutationKey = ["uploadAvatar"];
@@ -1579,7 +1580,7 @@ export const getUploadAvatarMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof uploadAvatar>>,
-    { data: BodyType<UploadAvatarInput> }
+    { data: BodyType<Blob> }
   > = (props) => {
     const { data } = props ?? {};
 
@@ -1592,7 +1593,7 @@ export const getUploadAvatarMutationOptions = <
 export type UploadAvatarMutationResult = NonNullable<
   Awaited<ReturnType<typeof uploadAvatar>>
 >;
-export type UploadAvatarMutationBody = BodyType<UploadAvatarInput>;
+export type UploadAvatarMutationBody = BodyType<Blob>;
 export type UploadAvatarMutationError = ErrorType<ErrorResponse>;
 
 /**
@@ -1605,14 +1606,14 @@ export const useUploadAvatar = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof uploadAvatar>>,
     TError,
-    { data: BodyType<UploadAvatarInput> },
+    { data: BodyType<Blob> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof uploadAvatar>>,
   TError,
-  { data: BodyType<UploadAvatarInput> },
+  { data: BodyType<Blob> },
   TContext
 > => {
   return useMutation(getUploadAvatarMutationOptions(options));

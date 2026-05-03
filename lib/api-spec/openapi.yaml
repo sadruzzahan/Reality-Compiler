@@ -420,15 +420,26 @@ paths:
       tags: [me]
       summary: Upload a new profile avatar image
       description: |
-        Accepts a base64-encoded image (PNG, JPEG, or WebP, max 4 MB) and
-        stores it in object storage. Returns the updated user profile with
-        a hosted `avatarUrl`.
+        Streams an image (PNG, JPEG, or WebP, max 4 MB) directly into
+        object storage; the request body is the raw image bytes and the
+        `Content-Type` header selects the image type. Returns the updated
+        user profile with a hosted `avatarUrl`. The previous avatar
+        object is deleted best-effort after a successful upload.
       requestBody:
         required: true
         content:
-          application/json:
+          image/png:
             schema:
-              $ref: "#/components/schemas/UploadAvatarInput"
+              type: string
+              format: binary
+          image/jpeg:
+            schema:
+              type: string
+              format: binary
+          image/webp:
+            schema:
+              type: string
+              format: binary
       responses:
         "200":
           description: Updated user profile
@@ -1156,21 +1167,6 @@ components:
             Set to `null` to clear the avatar.
           type: ["string", "null"]
           maxLength: 1024
-
-    UploadAvatarInput:
-      type: object
-      properties:
-        contentType:
-          type: string
-          enum: [image/png, image/jpeg, image/webp]
-        dataBase64:
-          type: string
-          description: Base64-encoded image bytes (no `data:` prefix). Max 4 MB decoded.
-          minLength: 1
-          maxLength: 7000000
-      required:
-        - contentType
-        - dataBase64
 
     PublishListingInput:
       type: object

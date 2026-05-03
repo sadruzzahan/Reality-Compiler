@@ -5,12 +5,16 @@ import { eq } from "drizzle-orm";
 import { db, userProfilesTable, type UserProfile } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { handleForUser } from "../lib/handles";
-import { UpdateMyProfileBody, UploadAvatarBody } from "@workspace/api-zod";
+import { UpdateMyProfileBody } from "@workspace/api-zod";
 import { asyncHandler } from "../middlewares/asyncHandler";
 import { parseOrThrow } from "../middlewares/validate";
 import { mutateLimiter } from "../middlewares/rateLimits";
 import { ApiError, badRequest } from "../lib/errors";
-import { deleteObjectByUrl, putImage } from "../lib/objectStorage";
+import {
+  PayloadTooLargeError,
+  deleteObjectByUrl,
+  streamUpload,
+} from "../lib/objectStorage";
 
 const MAX_AVATAR_BYTES = 4 * 1024 * 1024; // 4 MB
 const ALLOWED_AVATAR_TYPES = new Set([
@@ -109,34 +113,43 @@ router.post(
   mutateLimiter,
   asyncHandler(async (req, res) => {
     const userId = req.userId!;
-    const body = parseOrThrow(UploadAvatarBody, req.body);
+    const contentType = String(req.headers["content-type"] ?? "")
+      .split(";")[0]
+      .trim()
+      .toLowerCase();
 
-    if (!ALLOWED_AVATAR_TYPES.has(body.contentType)) {
-      throw badRequest("Unsupported image type. Use PNG, JPEG, or WebP.");
-    }
-
-    let buffer: Buffer;
-    try {
-      buffer = Buffer.from(body.dataBase64, "base64");
-    } catch {
-      throw badRequest("Invalid base64 payload");
-    }
-    if (buffer.length === 0) throw badRequest("Empty image payload");
-    if (buffer.length > MAX_AVATAR_BYTES) {
-      throw new ApiError("PAYLOAD_TOO_LARGE", "Avatar too large (max 4 MB)");
+    if (!ALLOWED_AVATAR_TYPES.has(contentType)) {
+      throw badRequest(
+        "Unsupported image type. Use PNG, JPEG, or WebP via Content-Type.",
+      );
     }
 
     const ext =
-      body.contentType === "image/png"
+      contentType === "image/png"
         ? "png"
-        : body.contentType === "image/webp"
+        : contentType === "image/webp"
           ? "webp"
           : "jpg";
     // Versioned key (avoids cache busts when the avatar changes; old object
-    // is deleted below). Falls under `avatars/<userId>/...` per the runbook.
+    // is deleted below). Scoped under `avatars/<userId>/...`.
     const safeUser = encodeURIComponent(userId);
     const key = `avatars/${safeUser}/${randomUUID()}.${ext}`;
-    const url = await putImage(key, buffer, body.contentType);
+
+    let url: string;
+    try {
+      const result = await streamUpload(
+        key,
+        contentType,
+        req,
+        MAX_AVATAR_BYTES,
+      );
+      url = result.url;
+    } catch (err) {
+      if (err instanceof PayloadTooLargeError) {
+        throw new ApiError("PAYLOAD_TOO_LARGE", "Avatar too large (max 4 MB)");
+      }
+      throw err;
+    }
 
     const previous = await loadProfile(userId);
     await db

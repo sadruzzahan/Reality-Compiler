@@ -663,25 +663,14 @@ export const GetMeResponse = zod.object({
 });
 
 /**
- * Accepts a base64-encoded image (PNG, JPEG, or WebP, max 4 MB) and
-stores it in object storage. Returns the updated user profile with
-a hosted `avatarUrl`.
+ * Streams an image (PNG, JPEG, or WebP, max 4 MB) directly into
+object storage; the request body is the raw image bytes and the
+`Content-Type` header selects the image type. Returns the updated
+user profile with a hosted `avatarUrl`. The previous avatar
+object is deleted best-effort after a successful upload.
 
  * @summary Upload a new profile avatar image
  */
-export const uploadAvatarBodyDataBase64Max = 7000000;
-
-export const UploadAvatarBody = zod.object({
-  contentType: zod.enum(["image/png", "image/jpeg", "image/webp"]),
-  dataBase64: zod
-    .string()
-    .min(1)
-    .max(uploadAvatarBodyDataBase64Max)
-    .describe(
-      "Base64-encoded image bytes (no `data:` prefix). Max 4 MB decoded.",
-    ),
-});
-
 export const UploadAvatarResponse = zod.object({
   userId: zod.string(),
   handle: zod.string(),

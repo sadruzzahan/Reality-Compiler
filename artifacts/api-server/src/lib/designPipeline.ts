@@ -4,6 +4,8 @@ import { z } from "zod";
 import { logger } from "./logger";
 import { putImage } from "./objectStorage";
 
+const MAX_GENERATED_IMAGE_BYTES = 8 * 1024 * 1024; // 8 MB hard cap
+
 const MODEL = "gpt-5.4";
 
 const BomItemSchema = z.object({
@@ -119,6 +121,13 @@ export async function generateAndStoreConceptImage(
       `${imagePrompt}. Clean studio product photo, soft neutral background, sharp focus, professional industrial design render.`,
       "1024x1024",
     );
+    if (buffer.length > MAX_GENERATED_IMAGE_BYTES) {
+      logger.warn(
+        { sessionId, bytes: buffer.length, cap: MAX_GENERATED_IMAGE_BYTES },
+        "Generated image exceeds size cap; dropping",
+      );
+      return null;
+    }
     const safeUser = encodeURIComponent(userId);
     const key = `sessions/${safeUser}/${sessionId}/${randomUUID()}.png`;
     return await putImage(key, buffer, "image/png");

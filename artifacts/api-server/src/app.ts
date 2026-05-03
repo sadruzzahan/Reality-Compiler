@@ -91,7 +91,9 @@ app.use(corsMiddleware());
 // by `cors`, before any route work).
 app.use(globalLimiter);
 
-app.use("/api/me/avatar", express.json({ limit: "8mb" }));
+// Default JSON parser. Note: express.json only matches `application/json`
+// by default, so the binary `POST /api/me/avatar` route (image/png|jpeg|webp)
+// streams its body directly via `streamUpload` and is unaffected here.
 app.use(express.json({ limit: "256kb" }));
 app.use(express.urlencoded({ extended: true, limit: "256kb" }));
 

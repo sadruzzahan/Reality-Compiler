@@ -45,6 +45,13 @@ function fileForKey(key: string): GcsFile {
   return objectStorageClient.bucket(bucketName).file(objectName);
 }
 
+export class PayloadTooLargeError extends Error {
+  constructor(message = "Payload too large") {
+    super(message);
+    this.name = "PayloadTooLargeError";
+  }
+}
+
 export function urlForObjectKey(key: string): string {
   return STORAGE_PUBLIC_PREFIX + key;
 }
@@ -91,6 +98,62 @@ export async function deleteObjectByUrl(
   const key = objectKeyFromUrl(url);
   if (!key) return;
   await deleteObjectByKey(key);
+}
+
+/**
+ * Streams an HTTP request body straight into App Storage with a hard
+ * `maxBytes` cap. Returns the served URL once the upload finishes, or
+ * throws PayloadTooLargeError as soon as the cap is exceeded.
+ */
+export async function streamUpload(
+  key: string,
+  contentType: string,
+  source: NodeJS.ReadableStream,
+  maxBytes: number,
+): Promise<{ url: string; bytes: number }> {
+  const file = fileForKey(key);
+  const writeStream = file.createWriteStream({
+    contentType,
+    metadata: { cacheControl: IMMUTABLE_CACHE_HEADER },
+    resumable: false,
+  });
+
+  let bytes = 0;
+  let aborted: Error | null = null;
+
+  await new Promise<void>((resolve, reject) => {
+    const onData = (chunk: Buffer) => {
+      bytes += chunk.length;
+      if (bytes > maxBytes && !aborted) {
+        aborted = new PayloadTooLargeError(
+          `Upload exceeds ${maxBytes} bytes`,
+        );
+        source.unpipe(writeStream);
+        writeStream.destroy(aborted);
+        // Drain any further bytes silently so the client connection closes.
+        source.on("data", () => {});
+      }
+    };
+    source.on("data", onData);
+    source.on("error", (err) => {
+      writeStream.destroy(err);
+      reject(err);
+    });
+    writeStream.on("error", (err) => reject(aborted ?? err));
+    writeStream.on("finish", () => {
+      if (aborted) reject(aborted);
+      else resolve();
+    });
+    source.pipe(writeStream);
+  });
+
+  if (bytes === 0) {
+    // Best-effort cleanup of an empty placeholder object.
+    await deleteObjectByKey(key);
+    throw new PayloadTooLargeError("Empty upload");
+  }
+
+  return { url: urlForObjectKey(key), bytes };
 }
 
 export async function streamObject(key: string, res: Response): Promise<void> {

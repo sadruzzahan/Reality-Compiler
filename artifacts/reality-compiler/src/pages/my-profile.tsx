@@ -4,12 +4,13 @@ import { Loader2, User, ExternalLink, Upload, X } from "lucide-react";
 import {
   useGetMe,
   useUpdateMyProfile,
-  useUploadAvatar,
+  customFetch,
   getGetMeQueryKey,
   getGetDesignerProfileQueryKey,
   getListMarketplaceListingsQueryKey,
+  type Me,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,27 +32,18 @@ const AVATAR_MAX_BYTES = 4 * 1024 * 1024;
 const AVATAR_ACCEPT = "image/png,image/jpeg,image/webp";
 const AVATAR_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(reader.error);
-    reader.onload = () => {
-      const result = reader.result;
-      if (typeof result !== "string") {
-        reject(new Error("Unexpected reader output"));
-        return;
-      }
-      const idx = result.indexOf(",");
-      resolve(idx >= 0 ? result.slice(idx + 1) : result);
-    };
-    reader.readAsDataURL(file);
+async function uploadAvatarStreaming(file: File): Promise<Me> {
+  return customFetch<Me>("/me/avatar", {
+    method: "POST",
+    body: file,
+    headers: { "content-type": file.type },
   });
 }
 
 export default function MyProfile() {
   const { data: me, isLoading } = useGetMe();
   const updateProfile = useUpdateMyProfile();
-  const uploadAvatar = useUploadAvatar();
+  const uploadAvatar = useMutation({ mutationFn: uploadAvatarStreaming });
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -97,13 +89,7 @@ export default function MyProfile() {
       return;
     }
     try {
-      const dataBase64 = await fileToBase64(file);
-      const updated = await uploadAvatar.mutateAsync({
-        data: {
-          contentType: file.type as "image/png" | "image/jpeg" | "image/webp",
-          dataBase64,
-        },
-      });
+      const updated = await uploadAvatar.mutateAsync(file);
       setAvatarUrl(updated.avatarUrl ?? null);
       invalidateProfileQueries(me.userId);
       toast({
