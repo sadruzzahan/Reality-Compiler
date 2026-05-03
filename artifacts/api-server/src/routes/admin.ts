@@ -115,6 +115,8 @@ router.post(
       orderId: order.id,
       paymentIntentId: order.stripePaymentIntentId,
       amountDollars: body.amount ?? null,
+      alreadyRefundedDollars: Number(order.refundedAmount),
+      totalDollars: Number(order.totalCost),
       reason: body.reason,
     });
 

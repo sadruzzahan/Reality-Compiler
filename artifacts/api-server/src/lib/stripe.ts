@@ -95,8 +95,23 @@ export function checkoutIdempotencyKey(
   return `order:${orderId}:checkout:v1:${attempt}`;
 }
 
-export function refundIdempotencyKey(orderId: number, attempt: number): string {
-  return `order:${orderId}:refund:v1:${attempt}`;
+/**
+ * Refund idempotency keys must be unique per refund attempt but stable
+ * across retries of the same attempt. We derive the key from the order id,
+ * the refunded-amount baseline before this refund (in cents) and the
+ * requested amount (in cents). That way:
+ *   - Retrying the exact same partial refund returns the original Refund.
+ *   - A second, distinct partial refund on the same order gets a fresh
+ *     key (the baseline has shifted) so Stripe processes it normally.
+ *   - A "full refund of the remaining balance" call still dedupes per
+ *     baseline so accidental double-clicks don't double-refund.
+ */
+export function refundIdempotencyKey(
+  orderId: number,
+  previouslyRefundedCents: number,
+  requestedCents: number,
+): string {
+  return `order:${orderId}:refund:v2:base${previouslyRefundedCents}:amt${requestedCents}`;
 }
 
 export function connectAccountIdempotencyKey(userId: string): string {
@@ -225,12 +240,21 @@ export async function createConnectAccountLink(
       },
     );
   }
-  const link = await stripe.accountLinks.create({
-    account: account.id,
-    type: "account_onboarding",
-    refresh_url: input.refreshUrl,
-    return_url: input.returnUrl,
-  });
+  // Bucket the idempotency key by minute so a rapid double-click returns
+  // the same single-use link, but a deliberate "resume onboarding" click
+  // a few minutes later (after the first link expired) gets a fresh one.
+  const minuteBucket = Math.floor(Date.now() / 60_000);
+  const link = await stripe.accountLinks.create(
+    {
+      account: account.id,
+      type: "account_onboarding",
+      refresh_url: input.refreshUrl,
+      return_url: input.returnUrl,
+    },
+    {
+      idempotencyKey: `connect:${input.userId}:link:v1:${minuteBucket}`,
+    },
+  );
   return { account, link };
 }
 
@@ -255,16 +279,32 @@ export async function getAccountStatus(
 export interface RefundOrderInput {
   orderId: number;
   paymentIntentId: string;
-  /** Amount in dollars to refund; null for full refund. */
+  /** Amount in dollars to refund; null for full refund of the remainder. */
   amountDollars: number | null;
+  /** How much has already been refunded for this order, in dollars. */
+  alreadyRefundedDollars: number;
+  /** Total order amount in dollars (used to size a "remainder" refund). */
+  totalDollars: number;
   reason?: "duplicate" | "fraudulent" | "requested_by_customer";
-  attempt?: number;
 }
 
 export async function refundOrder(
   input: RefundOrderInput,
 ): Promise<Stripe.Refund> {
   const stripe = getStripe();
+  const baselineCents = Math.round(input.alreadyRefundedDollars * 100);
+  // For a "remainder" refund we let Stripe compute the actual amount, but
+  // size the idempotency key off the remaining balance so distinct
+  // sequential remainder calls (which shouldn't normally happen) still get
+  // distinct keys.
+  const requestedCents =
+    input.amountDollars != null
+      ? Math.round(input.amountDollars * 100)
+      : Math.max(
+          0,
+          Math.round(input.totalDollars * 100) - baselineCents,
+        );
+
   const params: Stripe.RefundCreateParams = {
     payment_intent: input.paymentIntentId,
     // Reverse the platform's transfer to the connected account so the
@@ -275,13 +315,17 @@ export async function refundOrder(
     metadata: { orderId: String(input.orderId) },
   };
   if (input.amountDollars != null) {
-    params.amount = Math.round(input.amountDollars * 100);
+    params.amount = requestedCents;
   }
   if (input.reason) params.reason = input.reason;
 
   try {
     return await stripe.refunds.create(params, {
-      idempotencyKey: refundIdempotencyKey(input.orderId, input.attempt ?? 1),
+      idempotencyKey: refundIdempotencyKey(
+        input.orderId,
+        baselineCents,
+        requestedCents,
+      ),
     });
   } catch (err) {
     logger.warn(
