@@ -1,0 +1,17 @@
+{
+  "name": "@workspace/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "install-browsers": "playwright install --with-deps chromium"
+  },
+  "devDependencies": {
+    "@clerk/testing": "^1.13.4",
+    "@playwright/test": "^1.55.0",
+    "@types/node": "catalog:",
+    "dotenv": "^17.0.0"
+  }
+}
