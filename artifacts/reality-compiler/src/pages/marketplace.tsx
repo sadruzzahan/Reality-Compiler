@@ -31,7 +31,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Slider } from "@/components/ui/slider";
 import { usePublicPageHead } from "@/lib/seo-defaults";
 import {
   Select,
@@ -48,7 +49,6 @@ const SORTS: { value: ListMarketplaceListingsSort; label: string }[] = [
   { value: "price-desc", label: "Price: high to low" },
 ];
 
-const ALL_CATEGORY = "__all__";
 const CATEGORIES = [
   "Mechanical",
   "Consumer",
@@ -58,6 +58,29 @@ const CATEGORIES = [
 ] as const;
 
 const PAGE_SIZE = 24;
+const PRICE_FLOOR = 0;
+const PRICE_CEILING = 5000;
+const PRICE_STEP = 25;
+
+function parseCategorySet(raw: string): Set<string> {
+  return new Set(
+    raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+}
+
+function serializeCategorySet(set: Set<string>): string {
+  // Stable order matches CATEGORIES so URLs are deterministic.
+  return CATEGORIES.filter((c) => set.has(c)).join(",");
+}
+
+function parseFinitePrice(raw: string): number | undefined {
+  if (!raw) return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
 
 interface FilterState {
   q: string;
@@ -106,10 +129,10 @@ function toApiParams(
   };
   if (f.q.trim()) params.q = f.q.trim();
   if (f.category) params.category = f.category;
-  const min = Number(f.minPrice);
-  const max = Number(f.maxPrice);
-  if (f.minPrice && Number.isFinite(min) && min >= 0) params.minPrice = min;
-  if (f.maxPrice && Number.isFinite(max) && max >= 0) params.maxPrice = max;
+  const min = parseFinitePrice(f.minPrice);
+  const max = parseFinitePrice(f.maxPrice);
+  if (min !== undefined) params.minPrice = min;
+  if (max !== undefined) params.maxPrice = max;
   if (f.creator) params.creator = f.creator;
   if (cursor) params.cursor = cursor;
   return params;
@@ -196,11 +219,13 @@ export default function Marketplace() {
     !!filters.minPrice ||
     !!filters.maxPrice ||
     !!filters.creator;
+  const countMin = parseFinitePrice(filters.minPrice);
+  const countMax = parseFinitePrice(filters.maxPrice);
   const countParams = {
     ...(filters.q ? { q: filters.q } : {}),
     ...(filters.category ? { category: filters.category } : {}),
-    ...(filters.minPrice ? { minPrice: Number(filters.minPrice) } : {}),
-    ...(filters.maxPrice ? { maxPrice: Number(filters.maxPrice) } : {}),
+    ...(countMin !== undefined ? { minPrice: countMin } : {}),
+    ...(countMax !== undefined ? { maxPrice: countMax } : {}),
     ...(filters.creator ? { creator: filters.creator } : {}),
   };
   const { data: countData } = useCountMarketplaceListings(countParams, {
@@ -317,84 +342,54 @@ export default function Marketplace() {
               </Select>
             </FilterSection>
 
-            <FilterSection title="Category">
-              <Select
-                value={filters.category || ALL_CATEGORY}
-                onValueChange={(v) =>
-                  updateFilters({ category: v === ALL_CATEGORY ? "" : v })
-                }
+            <FilterSection title="Categories">
+              <div
+                role="group"
+                aria-label="Filter by category"
+                data-testid="group-category"
+                className="space-y-1.5"
               >
-                <SelectTrigger
-                  className="font-mono text-xs"
-                  data-testid="select-category"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem
-                    value={ALL_CATEGORY}
-                    className="font-mono text-xs"
-                  >
-                    All categories
-                  </SelectItem>
-                  {CATEGORIES.map((c) => (
-                    <SelectItem
+                {CATEGORIES.map((c) => {
+                  const selected = parseCategorySet(filters.category);
+                  const isChecked = selected.has(c);
+                  const id = `cat-${c.replace(/\s+/g, "-").toLowerCase()}`;
+                  return (
+                    <label
                       key={c}
-                      value={c}
-                      className="font-mono text-xs"
+                      htmlFor={id}
+                      className="flex items-center gap-2 cursor-pointer select-none rounded px-1 py-0.5 hover:bg-muted/40"
                     >
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                      <Checkbox
+                        id={id}
+                        checked={isChecked}
+                        data-testid={`checkbox-category-${c.replace(/\s+/g, "-").toLowerCase()}`}
+                        onCheckedChange={(next) => {
+                          const set = parseCategorySet(filters.category);
+                          if (next === true) set.add(c);
+                          else set.delete(c);
+                          updateFilters({
+                            category: serializeCategorySet(set),
+                          });
+                        }}
+                      />
+                      <span className="font-mono text-xs">{c}</span>
+                    </label>
+                  );
+                })}
+              </div>
             </FilterSection>
 
             <FilterSection title="Price (USD)">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label
-                    htmlFor="filter-min-price"
-                    className="font-mono text-[10px] uppercase text-muted-foreground"
-                  >
-                    Min
-                  </Label>
-                  <Input
-                    id="filter-min-price"
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    value={filters.minPrice}
-                    onChange={(e) =>
-                      updateFilters({ minPrice: e.target.value })
-                    }
-                    placeholder="0"
-                    className="font-mono text-xs h-9"
-                    data-testid="input-min-price"
-                  />
-                </div>
-                <div>
-                  <Label
-                    htmlFor="filter-max-price"
-                    className="font-mono text-[10px] uppercase text-muted-foreground"
-                  >
-                    Max
-                  </Label>
-                  <Input
-                    id="filter-max-price"
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    value={filters.maxPrice}
-                    onChange={(e) =>
-                      updateFilters({ maxPrice: e.target.value })
-                    }
-                    placeholder="∞"
-                    className="font-mono text-xs h-9"
-                    data-testid="input-max-price"
-                  />
-                </div>
-              </div>
+              <PriceRangeFilter
+                minRaw={filters.minPrice}
+                maxRaw={filters.maxPrice}
+                onCommit={(min, max) =>
+                  updateFilters({
+                    minPrice: min === PRICE_FLOOR ? "" : String(min),
+                    maxPrice: max >= PRICE_CEILING ? "" : String(max),
+                  })
+                }
+              />
             </FilterSection>
 
             {filters.creator ? (
@@ -547,6 +542,71 @@ export default function Marketplace() {
             )}
           </section>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Two-thumb price range filter. The slider is the primary control —
+ * dragging is local and only commits to the URL on release so we avoid
+ * spamming the API mid-drag. Numeric labels reflect the live value.
+ *
+ * `minRaw === ""` and `maxRaw === ""` represent "no bound", which we
+ * map to PRICE_FLOOR and PRICE_CEILING for the slider thumbs.
+ */
+function PriceRangeFilter({
+  minRaw,
+  maxRaw,
+  onCommit,
+}: {
+  minRaw: string;
+  maxRaw: string;
+  onCommit: (min: number, max: number) => void;
+}) {
+  const initial = useMemo<[number, number]>(() => {
+    const min = parseFinitePrice(minRaw) ?? PRICE_FLOOR;
+    const max = parseFinitePrice(maxRaw) ?? PRICE_CEILING;
+    return [
+      Math.max(PRICE_FLOOR, Math.min(min, PRICE_CEILING)),
+      Math.max(PRICE_FLOOR, Math.min(max, PRICE_CEILING)),
+    ];
+  }, [minRaw, maxRaw]);
+  const [draft, setDraft] = useState<[number, number]>(initial);
+
+  // Re-sync when URL state changes externally (e.g. clear filters,
+  // back button) and the user isn't actively dragging.
+  useEffect(() => {
+    setDraft(initial);
+  }, [initial]);
+
+  const [lo, hi] = draft;
+  const minLabel = lo === PRICE_FLOOR ? "$0" : `$${lo.toLocaleString()}`;
+  const maxLabel =
+    hi >= PRICE_CEILING
+      ? `$${PRICE_CEILING.toLocaleString()}+`
+      : `$${hi.toLocaleString()}`;
+
+  return (
+    <div className="space-y-3" data-testid="price-range-filter">
+      <Slider
+        min={PRICE_FLOOR}
+        max={PRICE_CEILING}
+        step={PRICE_STEP}
+        value={draft}
+        onValueChange={(v) => {
+          if (v.length >= 2) setDraft([v[0]!, v[1]!]);
+        }}
+        onValueCommit={(v) => {
+          if (v.length >= 2) onCommit(v[0]!, v[1]!);
+        }}
+        aria-label="Price range"
+        data-testid="slider-price-range"
+        className="py-2"
+      />
+      <div className="flex items-center justify-between font-mono text-[11px] text-muted-foreground">
+        <span data-testid="text-min-price">{minLabel}</span>
+        <span data-testid="text-max-price">{maxLabel}</span>
       </div>
     </div>
   );

@@ -218,6 +218,17 @@ interface ListingFilters {
   creatorUserId: string | null | undefined;
 }
 
+/** Split a comma-separated `category` filter into a deduplicated list. */
+function parseCategoryList(raw: string | undefined): string[] {
+  if (!raw) return [];
+  const out: string[] = [];
+  for (const part of raw.split(",")) {
+    const trimmed = part.trim();
+    if (trimmed && !out.includes(trimmed)) out.push(trimmed);
+  }
+  return out;
+}
+
 function buildFilterClauses(filters: ListingFilters): {
   whereSql: ReturnType<typeof sql>;
   hasQuery: boolean;
@@ -225,8 +236,12 @@ function buildFilterClauses(filters: ListingFilters): {
   const parts: ReturnType<typeof sql>[] = [
     sql`l.status = 'active' AND l.deleted_at IS NULL`,
   ];
-  if (filters.category) {
-    parts.push(sql`l.category = ${filters.category}`);
+  const categories = parseCategoryList(filters.category);
+  if (categories.length === 1) {
+    parts.push(sql`l.category = ${categories[0]}`);
+  } else if (categories.length > 1) {
+    const items = categories.map((c) => sql`${c}`);
+    parts.push(sql`l.category IN (${sql.join(items, sql`, `)})`);
   }
   if (filters.minPrice != null) {
     parts.push(sql`l.listing_price >= ${String(filters.minPrice)}`);
