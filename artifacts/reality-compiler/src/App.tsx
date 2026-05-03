@@ -346,11 +346,34 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   );
 }
 
+function RouteBoundary({ children }: { children: React.ReactNode }) {
+  // A per-route Sentry boundary nested inside the app-level boundary. We
+  // key it on `location` so a render error on one page doesn't leave the
+  // fallback "stuck" after the user navigates away — Wouter changes
+  // `location`, the boundary remounts, and the new route renders cleanly.
+  const [location] = useLocation();
+  return (
+    <SentryErrorBoundary
+      key={location || "/"}
+      fallback={({ error, resetError, eventId }) => (
+        <ErrorFallback
+          error={error}
+          resetError={resetError}
+          eventId={eventId ?? undefined}
+        />
+      )}
+    >
+      {children}
+    </SentryErrorBoundary>
+  );
+}
+
 function AppShell() {
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col font-sans selection:bg-primary/30">
       <Navbar />
       <main className="flex-1 flex flex-col relative overflow-hidden">
+        <RouteBoundary>
         <Switch>
           <Route path="/" component={Home} />
           <Route path="/marketplace" component={Marketplace} />
@@ -397,6 +420,7 @@ function AppShell() {
           </Route>
           <Route component={NotFound} />
         </Switch>
+        </RouteBoundary>
       </main>
       <Footer />
       <CookieBanner />

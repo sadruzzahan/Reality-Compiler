@@ -1,6 +1,7 @@
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@workspace/api-client-react";
+import { getLastApiRequestId } from "@/lib/sentry";
 
 interface ErrorFallbackProps {
   error: unknown;
@@ -14,9 +15,13 @@ const SUPPORT_EMAIL =
 
 function getRequestId(error: unknown): string | undefined {
   if (error instanceof ApiError) {
-    return (error as ApiError).headers?.get("x-request-id") ?? undefined;
+    const direct = (error as ApiError).headers?.get("x-request-id");
+    if (direct) return direct;
   }
-  return undefined;
+  // Non-API runtime crashes (or ApiErrors with no header) fall back to the
+  // most recent recorded API failure so "Report this" still carries a
+  // correlation id when one is available anywhere in the session.
+  return getLastApiRequestId() ?? undefined;
 }
 
 function buildReportMailto(

@@ -49,7 +49,16 @@ app.use(
       } catch {
         userId = null;
       }
-      return { userId };
+      // Surface requestId at the top level (in addition to req.id) so log
+      // consumers can key off `requestId` without having to traverse the
+      // serialised request object.
+      return { userId, requestId: (req as { id?: string }).id ?? null };
+    },
+    // Rename pino-http's default `responseTime` field to `duration` so the
+    // top-level log shape matches the runbook (artifacts/observability.md)
+    // and downstream alerts can query a single canonical key.
+    customAttributeKeys: {
+      responseTime: "duration",
     },
     customSuccessMessage: (req, res, time) =>
       `${req.method} ${req.url?.split("?")[0]} ${res.statusCode} ${time}ms`,

@@ -65,6 +65,10 @@ export function initSentryIfConsented(): void {
   initialized = true;
 }
 
+export function getLastApiRequestId(): string | null {
+  return lastApiRequestId;
+}
+
 export function recordApiFailure(err: unknown): void {
   if (!(err instanceof ApiError)) return;
   const requestId = err.headers?.get("x-request-id");
