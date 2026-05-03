@@ -71,11 +71,17 @@ app.use(
     crossOriginEmbedderPolicy: false,
     crossOriginResourcePolicy: { policy: "cross-origin" },
     referrerPolicy: { policy: "no-referrer" },
-    strictTransportSecurity: {
-      maxAge: 60 * 60 * 24 * 365,
-      includeSubDomains: true,
-      preload: true,
-    },
+    // HSTS only in production. In dev the API is reached over the Replit
+    // proxy on a different hostname, and pinning HSTS there can cause sticky
+    // cache issues if a developer later switches schemes.
+    strictTransportSecurity:
+      process.env["NODE_ENV"] === "production"
+        ? {
+            maxAge: 60 * 60 * 24 * 365,
+            includeSubDomains: true,
+            preload: true,
+          }
+        : false,
   }),
 );
 
