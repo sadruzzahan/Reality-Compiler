@@ -25,7 +25,13 @@ import { ApiError } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useDocumentHead } from "@/hooks/use-document-head";
-import { SentryErrorBoundary, captureException } from "@/lib/sentry";
+import {
+  SentryErrorBoundary,
+  captureException,
+  recordApiFailure,
+  setSentryRoute,
+  setSentryUser,
+} from "@/lib/sentry";
 import { ErrorFallback } from "@/components/error-fallback";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
@@ -55,6 +61,9 @@ import { CookieBanner } from "@/components/cookie-banner";
 // (validation, not-found, unauthorized) — those are user-facing, not crashes,
 // and would drown the signal in noise.
 function reportQueryError(err: unknown): void {
+  // Always record the requestId of the most recent API failure for
+  // correlation, even when we don't forward the event itself to Sentry.
+  recordApiFailure(err);
   if (err instanceof ApiError) {
     const status = (err as ApiError).status;
     if (status >= 400 && status < 500) return;
@@ -306,10 +315,23 @@ function ClerkQueryClientCacheInvalidator() {
         qc.clear();
       }
       prevUserIdRef.current = userId;
+      // Mirror the active Clerk user onto the Sentry scope so every captured
+      // event (manual, ErrorBoundary, GlobalHandlers) is attributed.
+      setSentryUser(userId);
     });
     return unsubscribe;
   }, [addListener, qc]);
 
+  return null;
+}
+
+// Pushes the active wouter route onto the Sentry scope as a `route` tag so
+// uncaught errors and unhandled rejections inherit the page they happened on.
+function SentryRouteTagger() {
+  const [location] = useLocation();
+  useEffect(() => {
+    setSentryRoute(location || "/");
+  }, [location]);
   return null;
 }
 
@@ -412,6 +434,7 @@ function ClerkProviderWithRoutes() {
     >
       <QueryClientProvider client={queryClient}>
         <ClerkQueryClientCacheInvalidator />
+        <SentryRouteTagger />
         <TooltipProvider>
           <Switch>
             <Route path="/sign-in/*?" component={SignInPage} />

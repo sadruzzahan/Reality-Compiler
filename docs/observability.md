@@ -158,18 +158,29 @@ are filtered out client-side too.
 ### Source maps
 
 `vite build` emits `.map` files alongside the production bundle (see
-`build.sourcemap = true` in `vite.config.ts`). They should be **uploaded to
-Sentry and then deleted from the deployed bundle** so prod end-users can't
-download readable source. CI step:
+`build.sourcemap = true` in `vite.config.ts`). They are then handled
+**automatically** by `scripts/upload-sourcemaps.mjs`, which is wired into
+the `build` npm script:
+
+```
+"build": "vite build --config vite.config.ts && node ./scripts/upload-sourcemaps.mjs"
+```
+
+The post-build script:
+
+1. If `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT` are all set
+   (and `SENTRY_RELEASE` if you want a release-bound upload), it shells out
+   to `npx @sentry/cli sourcemaps upload` against `dist/public/`.
+2. Whether or not the upload runs, it then **deletes every `.map` file**
+   from `dist/public/` so production end-users can never download readable
+   source. This guarantee holds even if the upload step is misconfigured —
+   the deploy bundle is always source-map-free.
+
+To verify locally:
 
 ```sh
 pnpm --filter @workspace/reality-compiler run build
-npx @sentry/cli sourcemaps upload \
-  --org "$SENTRY_ORG" \
-  --project "$SENTRY_PROJECT" \
-  --release "$SENTRY_RELEASE" \
-  artifacts/reality-compiler/dist/public
-find artifacts/reality-compiler/dist/public -name '*.map' -delete
+find artifacts/reality-compiler/dist/public -name '*.map'  # should print nothing
 ```
 
 The backend already runs with `node --enable-source-maps` (see the

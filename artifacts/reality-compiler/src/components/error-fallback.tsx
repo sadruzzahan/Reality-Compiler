@@ -8,11 +8,43 @@ interface ErrorFallbackProps {
   eventId?: string;
 }
 
+const SUPPORT_EMAIL =
+  (import.meta.env.VITE_SUPPORT_EMAIL as string | undefined) ??
+  "support@reality-compiler.app";
+
 function getRequestId(error: unknown): string | undefined {
   if (error instanceof ApiError) {
     return (error as ApiError).headers?.get("x-request-id") ?? undefined;
   }
   return undefined;
+}
+
+function buildReportMailto(
+  message: string,
+  requestId: string | undefined,
+  eventId: string | undefined,
+): string {
+  const subjectParts = ["Reality Compiler error report"];
+  if (requestId) subjectParts.push(`req:${requestId}`);
+  const subject = encodeURIComponent(subjectParts.join(" "));
+  const bodyLines = [
+    "Hi Reality Compiler team,",
+    "",
+    "I hit an unexpected error in the app. Details below.",
+    "",
+    `Message: ${message}`,
+    requestId ? `Request ID: ${requestId}` : "",
+    eventId ? `Event ID: ${eventId}` : "",
+    `URL: ${typeof window !== "undefined" ? window.location.href : ""}`,
+    `User agent: ${typeof navigator !== "undefined" ? navigator.userAgent : ""}`,
+    "",
+    "What I was doing when it happened:",
+    "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const body = encodeURIComponent(bodyLines);
+  return `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
 }
 
 export function ErrorFallback({
@@ -79,30 +111,15 @@ export function ErrorFallback({
           Go home
         </Button>
         <Button
+          asChild
           variant="ghost"
           size="sm"
           className="font-mono text-xs"
-          onClick={() => {
-            const subject = encodeURIComponent(
-              "Reality Compiler error report",
-            );
-            const body = encodeURIComponent(
-              [
-                `Message: ${message}`,
-                requestId ? `Request: ${requestId}` : "",
-                eventId ? `Event: ${eventId}` : "",
-                `URL: ${window.location.href}`,
-              ]
-                .filter(Boolean)
-                .join("\n"),
-            );
-            window.location.href = `${
-              import.meta.env.BASE_URL || "/"
-            }contact?subject=${subject}&body=${body}`;
-          }}
           data-testid="button-error-report"
         >
-          Report this
+          <a href={buildReportMailto(message, requestId, eventId)}>
+            Report this
+          </a>
         </Button>
       </div>
     </div>
