@@ -1350,6 +1350,7 @@ components:
       properties:
         ok: { type: boolean }
         ref: { type: string }
+        emailed: { type: boolean }
 
     PublishListingInput:
       type: object

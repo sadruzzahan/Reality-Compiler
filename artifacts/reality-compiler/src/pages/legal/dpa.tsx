@@ -1,4 +1,8 @@
+import { Download } from "lucide-react";
 import { LegalPage } from "@/components/legal-page";
+
+const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+const PDF_HREF = `${basePath}/legal/reality-compiler-dpa.pdf`;
 
 export default function DpaPage() {
   return (
@@ -6,11 +10,33 @@ export default function DpaPage() {
       title="Data Processing Addendum"
       lastUpdated="May 3, 2026"
       intro={
-        <p>
-          This Data Processing Addendum ("DPA") supplements the Terms of
-          Service when Reality Compiler processes personal data on behalf of
-          a customer (the "Controller").
-        </p>
+        <div className="space-y-4">
+          <p>
+            This Data Processing Addendum ("DPA") supplements the Terms of
+            Service when Reality Compiler processes personal data on behalf
+            of a customer (the "Controller").
+          </p>
+          <a
+            href={PDF_HREF}
+            download="reality-compiler-dpa.pdf"
+            data-testid="link-dpa-download"
+            className="inline-flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-mono uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors"
+          >
+            <Download className="h-4 w-4" />
+            Download signed DPA (PDF)
+          </a>
+          <p className="text-xs text-muted-foreground">
+            Need a counter-signed copy or bespoke clauses (HIPAA, PCI-DSS,
+            etc.)? Email{" "}
+            <a
+              href="mailto:privacy@reality-compiler.example"
+              className="text-primary underline"
+            >
+              privacy@reality-compiler.example
+            </a>
+            .
+          </p>
+        </div>
       }
       sections={[
         {

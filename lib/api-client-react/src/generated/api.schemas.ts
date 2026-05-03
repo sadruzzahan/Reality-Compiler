@@ -346,6 +346,7 @@ export interface ContactInput {
 export interface ContactAck {
   ok: boolean;
   ref: string;
+  emailed?: boolean;
 }
 
 export interface PublishListingInput {

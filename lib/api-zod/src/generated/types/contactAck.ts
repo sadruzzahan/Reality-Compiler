@@ -9,4 +9,5 @@
 export interface ContactAck {
   ok: boolean;
   ref: string;
+  emailed?: boolean;
 }
