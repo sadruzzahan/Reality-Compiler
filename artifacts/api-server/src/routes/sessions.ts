@@ -19,6 +19,10 @@ import {
   generateConceptImageDataUrl,
 } from "../lib/designPipeline";
 import { requireAuth, attachUserId } from "../middlewares/auth";
+import { asyncHandler } from "../middlewares/asyncHandler";
+import { parseOrThrow } from "../middlewares/validate";
+import { aiLimiter } from "../middlewares/rateLimits";
+import { badRequest, forbidden, notFound } from "../lib/errors";
 
 const router: IRouter = Router();
 
@@ -193,203 +197,187 @@ async function runPipeline(sessionId: number) {
   }
 }
 
-router.get("/sessions", requireAuth, async (req, res): Promise<void> => {
-  const summaries = await buildSummaries(req.userId);
-  res.json(summaries);
-});
+router.get(
+  "/sessions",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const summaries = await buildSummaries(req.userId);
+    res.json(summaries);
+  }),
+);
 
-router.get("/sessions/stats", attachUserId, async (req, res): Promise<void> => {
-  const summaries = req.userId ? await buildSummaries(req.userId) : [];
-  const outputs = await db.select().from(designOutputsTable);
+router.get(
+  "/sessions/stats",
+  attachUserId,
+  asyncHandler(async (req, res) => {
+    const summaries = req.userId ? await buildSummaries(req.userId) : [];
+    const outputs = await db.select().from(designOutputsTable);
 
-  const materialCounts = new Map<string, number>();
-  const categoryCounts = new Map<string, number>();
-  let lowSum = 0;
-  let highSum = 0;
-  for (const o of outputs) {
-    categoryCounts.set(o.category, (categoryCounts.get(o.category) ?? 0) + 1);
-    for (const m of o.materials) {
-      materialCounts.set(m, (materialCounts.get(m) ?? 0) + 1);
+    const materialCounts = new Map<string, number>();
+    const categoryCounts = new Map<string, number>();
+    let lowSum = 0;
+    let highSum = 0;
+    for (const o of outputs) {
+      categoryCounts.set(o.category, (categoryCounts.get(o.category) ?? 0) + 1);
+      for (const m of o.materials) {
+        materialCounts.set(m, (materialCounts.get(m) ?? 0) + 1);
+      }
+      lowSum += o.costEstimate.low;
+      highSum += o.costEstimate.high;
     }
-    lowSum += o.costEstimate.low;
-    highSum += o.costEstimate.high;
-  }
 
-  const totalDesigns = outputs.length;
-  const avgCostLow = totalDesigns ? lowSum / totalDesigns : 0;
-  const avgCostHigh = totalDesigns ? highSum / totalDesigns : 0;
-  const totalEstimatedValue = (lowSum + highSum) / 2;
+    const totalDesigns = outputs.length;
+    const avgCostLow = totalDesigns ? lowSum / totalDesigns : 0;
+    const avgCostHigh = totalDesigns ? highSum / totalDesigns : 0;
+    const totalEstimatedValue = (lowSum + highSum) / 2;
 
-  const topMaterials = [...materialCounts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
-    .map(([material, count]) => ({ material, count }));
+    const topMaterials = [...materialCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([material, count]) => ({ material, count }));
 
-  const topCategories = [...categoryCounts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 6)
-    .map(([category, count]) => ({ category, count }));
+    const topCategories = [...categoryCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([category, count]) => ({ category, count }));
 
-  const [{ totalCount }] = await db
-    .select({ totalCount: sql<number>`count(*)::int` })
-    .from(designSessionsTable);
-  res.json({
-    totalSessions: totalCount ?? 0,
-    totalDesigns,
-    avgCostLow: Math.round(avgCostLow * 100) / 100,
-    avgCostHigh: Math.round(avgCostHigh * 100) / 100,
-    totalEstimatedValue: Math.round(totalEstimatedValue * 100) / 100,
-    topMaterials,
-    topCategories,
-    recentSessions: summaries.slice(0, 5),
-  });
-});
+    const [{ totalCount }] = await db
+      .select({ totalCount: sql<number>`count(*)::int` })
+      .from(designSessionsTable);
+    res.json({
+      totalSessions: totalCount ?? 0,
+      totalDesigns,
+      avgCostLow: Math.round(avgCostLow * 100) / 100,
+      avgCostHigh: Math.round(avgCostHigh * 100) / 100,
+      totalEstimatedValue: Math.round(totalEstimatedValue * 100) / 100,
+      topMaterials,
+      topCategories,
+      recentSessions: summaries.slice(0, 5),
+    });
+  }),
+);
 
-router.post("/sessions", requireAuth, async (req, res): Promise<void> => {
-  const parsed = CreateSessionBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+router.post(
+  "/sessions",
+  requireAuth,
+  aiLimiter,
+  asyncHandler(async (req, res) => {
+    const parsed = parseOrThrow(CreateSessionBody, req.body);
+    const prompt = parsed.prompt.trim();
+    if (!prompt) throw badRequest("Prompt is required");
 
-  const prompt = parsed.data.prompt.trim();
-  if (!prompt) {
-    res.status(400).json({ error: "Prompt is required" });
-    return;
-  }
+    const [session] = await db
+      .insert(designSessionsTable)
+      .values({
+        userId: req.userId!,
+        title: prompt.slice(0, 60),
+        status: "generating",
+      })
+      .returning();
 
-  const [session] = await db
-    .insert(designSessionsTable)
-    .values({
-      userId: req.userId!,
-      title: prompt.slice(0, 60),
-      status: "generating",
-    })
-    .returning();
+    await db.insert(designMessagesTable).values({
+      sessionId: session.id,
+      role: "user",
+      content: prompt,
+    });
 
-  await db.insert(designMessagesTable).values({
-    sessionId: session.id,
-    role: "user",
-    content: prompt,
-  });
+    try {
+      await runPipeline(session.id);
+    } catch (err) {
+      req.log.error({ err }, "Design pipeline failed");
+    }
 
-  try {
-    await runPipeline(session.id);
-  } catch (err) {
-    req.log.error({ err }, "Design pipeline failed");
-  }
+    const result = await buildSessionResponse(session.id);
+    res.status(result?.status === "error" ? 502 : 201).json(result);
+  }),
+);
 
-  const result = await buildSessionResponse(session.id);
-  res.status(result?.status === "error" ? 502 : 201).json(result);
-});
+router.get(
+  "/sessions/:id",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const params = parseOrThrow(GetSessionParams, req.params);
+    if (!(await userCanReadSession(params.id, req.userId!))) {
+      throw notFound("Session");
+    }
+    const result = await buildSessionResponse(params.id);
+    if (!result) throw notFound("Session");
+    res.json(result);
+  }),
+);
 
-router.get("/sessions/:id", requireAuth, async (req, res): Promise<void> => {
-  const params = GetSessionParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  if (!(await userCanReadSession(params.data.id, req.userId!))) {
-    res.status(404).json({ error: "Session not found" });
-    return;
-  }
-  const result = await buildSessionResponse(params.data.id);
-  if (!result) {
-    res.status(404).json({ error: "Session not found" });
-    return;
-  }
-  res.json(result);
-});
-
-router.delete("/sessions/:id", requireAuth, async (req, res): Promise<void> => {
-  const params = DeleteSessionParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  await db
-    .delete(designSessionsTable)
-    .where(
-      and(
-        eq(designSessionsTable.id, params.data.id),
-        eq(designSessionsTable.userId, req.userId!),
-      ),
-    );
-  res.sendStatus(204);
-});
+router.delete(
+  "/sessions/:id",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const params = parseOrThrow(DeleteSessionParams, req.params);
+    await db
+      .delete(designSessionsTable)
+      .where(
+        and(
+          eq(designSessionsTable.id, params.id),
+          eq(designSessionsTable.userId, req.userId!),
+        ),
+      );
+    res.sendStatus(204);
+  }),
+);
 
 router.get(
   "/sessions/:id/messages",
   requireAuth,
-  async (req, res): Promise<void> => {
-    const params = ListMessagesParams.safeParse(req.params);
-    if (!params.success) {
-      res.status(400).json({ error: params.error.message });
-      return;
-    }
-    if (!(await userCanReadSession(params.data.id, req.userId!))) {
-      res.status(404).json({ error: "Session not found" });
-      return;
+  asyncHandler(async (req, res) => {
+    const params = parseOrThrow(ListMessagesParams, req.params);
+    if (!(await userCanReadSession(params.id, req.userId!))) {
+      throw notFound("Session");
     }
     const messages = await db
       .select()
       .from(designMessagesTable)
-      .where(eq(designMessagesTable.sessionId, params.data.id))
+      .where(eq(designMessagesTable.sessionId, params.id))
       .orderBy(designMessagesTable.createdAt);
     res.json(messages.map(serializeMessage));
-  },
+  }),
 );
 
-router.post("/sessions/:id/messages", requireAuth, async (req, res): Promise<void> => {
-  const params = SendMessageParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const body = SendMessageBody.safeParse(req.body);
-  if (!body.success) {
-    res.status(400).json({ error: body.error.message });
-    return;
-  }
+router.post(
+  "/sessions/:id/messages",
+  requireAuth,
+  aiLimiter,
+  asyncHandler(async (req, res) => {
+    const params = parseOrThrow(SendMessageParams, req.params);
+    const body = parseOrThrow(SendMessageBody, req.body);
 
-  const content = body.data.content.trim();
-  if (!content) {
-    res.status(400).json({ error: "Content is required" });
-    return;
-  }
+    const content = body.content.trim();
+    if (!content) throw badRequest("Content is required");
 
-  const [session] = await db
-    .select()
-    .from(designSessionsTable)
-    .where(eq(designSessionsTable.id, params.data.id));
-  if (!session) {
-    res.status(404).json({ error: "Session not found" });
-    return;
-  }
-  if (session.userId !== req.userId) {
-    res.status(403).json({ error: "Not session owner" });
-    return;
-  }
+    const [session] = await db
+      .select()
+      .from(designSessionsTable)
+      .where(eq(designSessionsTable.id, params.id));
+    if (!session) throw notFound("Session");
+    if (session.userId !== req.userId) throw forbidden("Not session owner");
 
-  await db.insert(designMessagesTable).values({
-    sessionId: session.id,
-    role: "user",
-    content,
-  });
+    await db.insert(designMessagesTable).values({
+      sessionId: session.id,
+      role: "user",
+      content,
+    });
 
-  await db
-    .update(designSessionsTable)
-    .set({ status: "generating", updatedAt: new Date() })
-    .where(eq(designSessionsTable.id, session.id));
+    await db
+      .update(designSessionsTable)
+      .set({ status: "generating", updatedAt: new Date() })
+      .where(eq(designSessionsTable.id, session.id));
 
-  try {
-    await runPipeline(session.id);
-  } catch (err) {
-    req.log.error({ err }, "Design pipeline failed");
-  }
+    try {
+      await runPipeline(session.id);
+    } catch (err) {
+      req.log.error({ err }, "Design pipeline failed");
+    }
 
-  const result = await buildSessionResponse(session.id);
-  res.status(result?.status === "error" ? 502 : 200).json(result);
-});
+    const result = await buildSessionResponse(session.id);
+    res.status(result?.status === "error" ? 502 : 200).json(result);
+  }),
+);
 
 export default router;

@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { getAuth } from "@clerk/express";
+import { ApiError } from "../lib/errors";
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -17,12 +18,12 @@ export function getUserId(req: Request): string | null {
 
 export function requireAuth(
   req: Request,
-  res: Response,
+  _res: Response,
   next: NextFunction,
 ): void {
   const userId = getUserId(req);
   if (!userId) {
-    res.status(401).json({ error: "Unauthorized" });
+    next(new ApiError("UNAUTHENTICATED", "Authentication required"));
     return;
   }
   req.userId = userId;

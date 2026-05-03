@@ -23,6 +23,10 @@ import {
 import { serializeSupplier } from "./suppliers";
 import { requireAuth } from "../middlewares/auth";
 import { handleForUser } from "../lib/handles";
+import { asyncHandler } from "../middlewares/asyncHandler";
+import { parseOrThrow } from "../middlewares/validate";
+import { mutateLimiter } from "../middlewares/rateLimits";
+import { ApiError, badRequest, notFound } from "../lib/errors";
 
 const router: IRouter = Router();
 
@@ -115,58 +119,60 @@ async function serializeOrder(order: OrderRow) {
   };
 }
 
-router.get("/orders", requireAuth, async (req, res): Promise<void> => {
-  const rows = await db
-    .select({
-      order: ordersTable,
-      supplier: suppliersTable,
-      session: designSessionsTable,
-    })
-    .from(ordersTable)
-    .innerJoin(suppliersTable, eq(suppliersTable.id, ordersTable.supplierId))
-    .innerJoin(
-      designSessionsTable,
-      eq(designSessionsTable.id, ordersTable.sessionId),
-    )
-    .where(eq(ordersTable.userId, req.userId!))
-    .orderBy(desc(ordersTable.createdAt));
+router.get(
+  "/orders",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const rows = await db
+      .select({
+        order: ordersTable,
+        supplier: suppliersTable,
+        session: designSessionsTable,
+      })
+      .from(ordersTable)
+      .innerJoin(suppliersTable, eq(suppliersTable.id, ordersTable.supplierId))
+      .innerJoin(
+        designSessionsTable,
+        eq(designSessionsTable.id, ordersTable.sessionId),
+      )
+      .where(eq(ordersTable.userId, req.userId!))
+      .orderBy(desc(ordersTable.createdAt));
 
-  const summaries = await Promise.all(
-    rows.map(async (r) => {
-      const [output] = await db
-        .select({ productName: designOutputsTable.productName })
-        .from(designOutputsTable)
-        .where(eq(designOutputsTable.sessionId, r.session.id))
-        .orderBy(desc(designOutputsTable.createdAt))
-        .limit(1);
-      return {
-        id: r.order.id,
-        sessionId: r.order.sessionId,
-        sessionTitle: r.session.title,
-        productName: output?.productName ?? null,
-        supplierName: r.supplier.name,
-        status: r.order.status as OrderStatus,
-        quantity: r.order.quantity,
-        totalCost: Number(r.order.totalCost),
-        payoutAmount: Number(r.order.payoutAmount),
-        designerUserId: r.order.designerUserId,
-        leadTimeDays: r.order.leadTimeDays,
-        createdAt: r.order.createdAt.toISOString(),
-        updatedAt: r.order.updatedAt.toISOString(),
-      };
-    }),
-  );
-  res.json(summaries);
-});
+    const summaries = await Promise.all(
+      rows.map(async (r) => {
+        const [output] = await db
+          .select({ productName: designOutputsTable.productName })
+          .from(designOutputsTable)
+          .where(eq(designOutputsTable.sessionId, r.session.id))
+          .orderBy(desc(designOutputsTable.createdAt))
+          .limit(1);
+        return {
+          id: r.order.id,
+          sessionId: r.order.sessionId,
+          sessionTitle: r.session.title,
+          productName: output?.productName ?? null,
+          supplierName: r.supplier.name,
+          status: r.order.status as OrderStatus,
+          quantity: r.order.quantity,
+          totalCost: Number(r.order.totalCost),
+          payoutAmount: Number(r.order.payoutAmount),
+          designerUserId: r.order.designerUserId,
+          leadTimeDays: r.order.leadTimeDays,
+          createdAt: r.order.createdAt.toISOString(),
+          updatedAt: r.order.updatedAt.toISOString(),
+        };
+      }),
+    );
+    res.json(summaries);
+  }),
+);
 
 router.get(
   "/designer/orders",
   requireAuth,
-  async (req, res): Promise<void> => {
+  asyncHandler(async (req, res) => {
     const userId = req.userId!;
 
-    // Query by designerUserId so historical payouts survive even when a
-    // listing has since been unpublished/deleted.
     const rows = await db
       .select({
         order: ordersTable,
@@ -190,7 +196,6 @@ router.get(
       return;
     }
 
-    // Preload listings (may include nulls for deleted ones).
     const listingIds = Array.from(
       new Set(
         rows
@@ -210,7 +215,6 @@ router.get(
       for (const l of listings) listingById.set(l.id, l);
     }
 
-    // Preload latest design output per session in one query (no N+1).
     const sessionIds = Array.from(new Set(rows.map((r) => r.session.id)));
     const outputs = await db
       .select({
@@ -228,7 +232,6 @@ router.get(
       }
     }
 
-    // Resolve buyer handles in batch.
     const buyerIds = Array.from(new Set(rows.map((r) => r.order.userId)));
     const buyerHandleById = new Map<string, string | null>();
     await Promise.all(
@@ -258,9 +261,6 @@ router.get(
         r.order.marketplaceListingId != null
           ? listingById.get(r.order.marketplaceListingId) ?? null
           : null;
-      // When the listing has been deleted, we still report the original
-      // marketplace listing id (so historical payout rows render) but flag
-      // it via `listingDeleted` so the UI can suppress the dead link.
       const listingDeleted =
         r.order.marketplaceListingId != null && listing == null;
       return {
@@ -283,169 +283,140 @@ router.get(
       };
     });
     res.json(summaries);
-  },
+  }),
 );
 
-router.post("/orders", requireAuth, async (req, res): Promise<void> => {
-  const body = PlaceOrderBody.safeParse(req.body);
-  if (!body.success) {
-    res.status(400).json({ error: body.error.message });
-    return;
-  }
+router.post(
+  "/orders",
+  requireAuth,
+  mutateLimiter,
+  asyncHandler(async (req, res) => {
+    const body = parseOrThrow(PlaceOrderBody, req.body);
 
-  const [row] = await db
-    .select({
-      quote: quotesTable,
-      supplier: suppliersTable,
-      session: designSessionsTable,
-    })
-    .from(quotesTable)
-    .innerJoin(suppliersTable, eq(suppliersTable.id, quotesTable.supplierId))
-    .innerJoin(
-      designSessionsTable,
-      eq(designSessionsTable.id, quotesTable.sessionId),
-    )
-    .where(eq(quotesTable.id, body.data.quoteId));
-  if (!row) {
-    res.status(404).json({ error: "Quote not found" });
-    return;
-  }
+    const [row] = await db
+      .select({
+        quote: quotesTable,
+        supplier: suppliersTable,
+        session: designSessionsTable,
+      })
+      .from(quotesTable)
+      .innerJoin(suppliersTable, eq(suppliersTable.id, quotesTable.supplierId))
+      .innerJoin(
+        designSessionsTable,
+        eq(designSessionsTable.id, quotesTable.sessionId),
+      )
+      .where(eq(quotesTable.id, body.quoteId));
+    if (!row) throw notFound("Quote");
 
-  // Resolve and validate the marketplace listing if one was provided.
-  // The listing must reference this quote's session and be active —
-  // regardless of whether the requester also owns the session — so that
-  // payout attribution always points to the correct designer.
-  let listing: typeof marketplaceListingsTable.$inferSelect | null = null;
-  if (body.data.marketplaceListingId != null) {
-    const [found] = await db
-      .select()
-      .from(marketplaceListingsTable)
-      .where(eq(marketplaceListingsTable.id, body.data.marketplaceListingId));
-    if (
-      !found ||
-      found.sessionId !== row.quote.sessionId ||
-      found.status !== "active"
-    ) {
-      res.status(404).json({ error: "Listing not found" });
-      return;
+    let listing: typeof marketplaceListingsTable.$inferSelect | null = null;
+    if (body.marketplaceListingId != null) {
+      const [found] = await db
+        .select()
+        .from(marketplaceListingsTable)
+        .where(eq(marketplaceListingsTable.id, body.marketplaceListingId));
+      if (
+        !found ||
+        found.sessionId !== row.quote.sessionId ||
+        found.status !== "active"
+      ) {
+        throw notFound("Listing");
+      }
+      listing = found;
     }
-    listing = found;
-  }
 
-  // Authorize: requester must either own the underlying session, or be
-  // ordering against a (validated) published marketplace listing for it.
-  const authorized = row.session.userId === req.userId || listing !== null;
-  if (!authorized) {
-    res.status(404).json({ error: "Quote not found" });
-    return;
-  }
+    const authorized = row.session.userId === req.userId || listing !== null;
+    if (!authorized) throw notFound("Quote");
 
-  const quantity = body.data.quantity;
-  const unitCost = Number(row.quote.unitCost);
-  const setupFee = Number(row.quote.setupFee);
-  const totalCost = Math.round((unitCost * quantity + setupFee) * 100) / 100;
+    const quantity = body.quantity;
+    const unitCost = Number(row.quote.unitCost);
+    const setupFee = Number(row.quote.setupFee);
+    const totalCost = Math.round((unitCost * quantity + setupFee) * 100) / 100;
 
-  // Compute the designer payout. Payouts are only owed when the buyer is
-  // ordering against another designer's published listing — never when the
-  // designer orders their own session/listing.
-  let payoutAmount = 0;
-  let designerUserId: string | null = null;
-  if (
-    listing &&
-    listing.status === "active" &&
-    listing.userId !== req.userId
-  ) {
-    designerUserId = listing.userId;
-    payoutAmount =
-      Math.round(Number(listing.listingPrice) * quantity * 100) / 100;
-  }
-  const now = new Date();
-  const initialEvent: OrderStatusEvent = {
-    status: "queued",
-    note: STATUS_NOTES.queued,
-    at: now.toISOString(),
-  };
-
-  const [created] = await db
-    .insert(ordersTable)
-    .values({
-      userId: req.userId!,
-      marketplaceListingId: body.data.marketplaceListingId ?? null,
-      quoteId: row.quote.id,
-      sessionId: row.quote.sessionId,
-      supplierId: row.supplier.id,
-      quantity,
-      totalCost: String(totalCost),
-      designerUserId,
-      payoutAmount: String(payoutAmount),
-      leadTimeDays: row.quote.leadTimeDays,
-      shippingAddress: body.data.shippingAddress,
+    let payoutAmount = 0;
+    let designerUserId: string | null = null;
+    if (
+      listing &&
+      listing.status === "active" &&
+      listing.userId !== req.userId
+    ) {
+      designerUserId = listing.userId;
+      payoutAmount =
+        Math.round(Number(listing.listingPrice) * quantity * 100) / 100;
+    }
+    const now = new Date();
+    const initialEvent: OrderStatusEvent = {
       status: "queued",
-      statusHistory: [initialEvent],
-    })
-    .returning();
+      note: STATUS_NOTES.queued,
+      at: now.toISOString(),
+    };
 
-  const full = await loadOrder(created.id);
-  if (!full) {
-    res.status(500).json({ error: "Failed to load created order" });
-    return;
-  }
-  res.status(201).json(await serializeOrder(full));
-});
+    const [created] = await db
+      .insert(ordersTable)
+      .values({
+        userId: req.userId!,
+        marketplaceListingId: body.marketplaceListingId ?? null,
+        quoteId: row.quote.id,
+        sessionId: row.quote.sessionId,
+        supplierId: row.supplier.id,
+        quantity,
+        totalCost: String(totalCost),
+        designerUserId,
+        payoutAmount: String(payoutAmount),
+        leadTimeDays: row.quote.leadTimeDays,
+        shippingAddress: body.shippingAddress,
+        status: "queued",
+        statusHistory: [initialEvent],
+      })
+      .returning();
 
-router.get("/orders/:id", requireAuth, async (req, res): Promise<void> => {
-  const params = GetOrderParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const order = await loadOrder(params.data.id);
-  if (!order || order.userId !== req.userId) {
-    res.status(404).json({ error: "Order not found" });
-    return;
-  }
-  res.json(await serializeOrder(order));
-});
+    const full = await loadOrder(created.id);
+    if (!full) throw new ApiError("INTERNAL", "Failed to load created order");
+    res.status(201).json(await serializeOrder(full));
+  }),
+);
 
-router.post("/orders/:id/advance", requireAuth, async (req, res): Promise<void> => {
-  const params = AdvanceOrderParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const order = await loadOrder(params.data.id);
-  if (!order || order.userId !== req.userId) {
-    res.status(404).json({ error: "Order not found" });
-    return;
-  }
-  const currentIdx = STATUS_FLOW.indexOf(order.status as OrderStatus);
-  if (currentIdx < 0 || currentIdx >= STATUS_FLOW.length - 1) {
-    res
-      .status(400)
-      .json({ error: "Order is already at its final status." });
-    return;
-  }
-  const next = STATUS_FLOW[currentIdx + 1]!;
-  const event: OrderStatusEvent = {
-    status: next,
-    note: STATUS_NOTES[next],
-    at: new Date().toISOString(),
-  };
-  await db
-    .update(ordersTable)
-    .set({
+router.get(
+  "/orders/:id",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const params = parseOrThrow(GetOrderParams, req.params);
+    const order = await loadOrder(params.id);
+    if (!order || order.userId !== req.userId) throw notFound("Order");
+    res.json(await serializeOrder(order));
+  }),
+);
+
+router.post(
+  "/orders/:id/advance",
+  requireAuth,
+  mutateLimiter,
+  asyncHandler(async (req, res) => {
+    const params = parseOrThrow(AdvanceOrderParams, req.params);
+    const order = await loadOrder(params.id);
+    if (!order || order.userId !== req.userId) throw notFound("Order");
+    const currentIdx = STATUS_FLOW.indexOf(order.status as OrderStatus);
+    if (currentIdx < 0 || currentIdx >= STATUS_FLOW.length - 1) {
+      throw badRequest("Order is already at its final status.");
+    }
+    const next = STATUS_FLOW[currentIdx + 1]!;
+    const event: OrderStatusEvent = {
       status: next,
-      statusHistory: [...order.statusHistory, event],
-      updatedAt: new Date(),
-    })
-    .where(eq(ordersTable.id, order.id));
+      note: STATUS_NOTES[next],
+      at: new Date().toISOString(),
+    };
+    await db
+      .update(ordersTable)
+      .set({
+        status: next,
+        statusHistory: [...order.statusHistory, event],
+        updatedAt: new Date(),
+      })
+      .where(eq(ordersTable.id, order.id));
 
-  const updated = await loadOrder(order.id);
-  if (!updated) {
-    res.status(404).json({ error: "Order not found after update" });
-    return;
-  }
-  res.json(await serializeOrder(updated));
-});
+    const updated = await loadOrder(order.id);
+    if (!updated) throw notFound("Order");
+    res.json(await serializeOrder(updated));
+  }),
+);
 
 export default router;

@@ -26,6 +26,10 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
 import { handleForUser } from "../lib/handles";
+import { asyncHandler } from "../middlewares/asyncHandler";
+import { parseOrThrow } from "../middlewares/validate";
+import { mutateLimiter } from "../middlewares/rateLimits";
+import { badRequest, forbidden, notFound } from "../lib/errors";
 
 const router: IRouter = Router();
 
@@ -112,49 +116,48 @@ function serializeOutput(out: typeof designOutputsTable.$inferSelect) {
   };
 }
 
-router.get("/marketplace/listings", async (req, res): Promise<void> => {
-  const params = ListMarketplaceListingsQueryParams.safeParse(req.query);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const { category, sort } = params.data;
+router.get(
+  "/marketplace/listings",
+  asyncHandler(async (req, res) => {
+    const params = parseOrThrow(ListMarketplaceListingsQueryParams, req.query);
+    const { category, sort } = params;
 
-  const conds = [eq(marketplaceListingsTable.status, "active")];
-  if (category) conds.push(eq(marketplaceListingsTable.category, category));
+    const conds = [eq(marketplaceListingsTable.status, "active")];
+    if (category) conds.push(eq(marketplaceListingsTable.category, category));
 
-  const rows = await db
-    .select()
-    .from(marketplaceListingsTable)
-    .where(and(...conds));
+    const rows = await db
+      .select()
+      .from(marketplaceListingsTable)
+      .where(and(...conds));
 
-  const profileMap = await loadProfilesByUserIds(rows.map((r) => r.userId));
-  const summaries = await Promise.all(
-    rows.map((r) => buildSummary(r, profileMap.get(r.userId) ?? null)),
-  );
+    const profileMap = await loadProfilesByUserIds(rows.map((r) => r.userId));
+    const summaries = await Promise.all(
+      rows.map((r) => buildSummary(r, profileMap.get(r.userId) ?? null)),
+    );
 
-  switch (sort) {
-    case "price-asc":
-      summaries.sort((a, b) => a.listingPrice - b.listingPrice);
-      break;
-    case "price-desc":
-      summaries.sort((a, b) => b.listingPrice - a.listingPrice);
-      break;
-    case "newest":
-      summaries.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-      break;
-    case "popular":
-    default:
-      summaries.sort(
-        (a, b) =>
-          b.orderCount - a.orderCount ||
-          b.createdAt.localeCompare(a.createdAt),
-      );
-      break;
-  }
+    switch (sort) {
+      case "price-asc":
+        summaries.sort((a, b) => a.listingPrice - b.listingPrice);
+        break;
+      case "price-desc":
+        summaries.sort((a, b) => b.listingPrice - a.listingPrice);
+        break;
+      case "newest":
+        summaries.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        break;
+      case "popular":
+      default:
+        summaries.sort(
+          (a, b) =>
+            b.orderCount - a.orderCount ||
+            b.createdAt.localeCompare(a.createdAt),
+        );
+        break;
+    }
 
-  res.json(summaries);
-});
+    res.json(summaries);
+  }),
+);
 
 type QuoteWithSupplier = Quote & { supplier: Supplier };
 
@@ -222,79 +225,65 @@ async function ensureQuotesForListing(
   return loadQuotesForSession(sessionId);
 }
 
-router.get("/marketplace/listings/:id", async (req, res): Promise<void> => {
-  const params = GetMarketplaceListingParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const [listing] = await db
-    .select()
-    .from(marketplaceListingsTable)
-    .where(eq(marketplaceListingsTable.id, params.data.id));
-  if (!listing) {
-    res.status(404).json({ error: "Listing not found" });
-    return;
-  }
-  const [output] = await db
-    .select()
-    .from(designOutputsTable)
-    .where(eq(designOutputsTable.sessionId, listing.sessionId))
-    .orderBy(desc(designOutputsTable.createdAt))
-    .limit(1);
-  if (!output) {
-    res.status(404).json({ error: "Listing has no design output" });
-    return;
-  }
-  const [{ c }] = await db
-    .select({ c: sql<number>`count(*)::int` })
-    .from(ordersTable)
-    .where(eq(ordersTable.marketplaceListingId, listing.id));
-  const quotes = await ensureQuotesForListing(listing.sessionId, output);
-  res.json({
-    id: listing.id,
-    sessionId: listing.sessionId,
-    userId: listing.userId,
-    creatorHandle: listing.creatorHandle,
-    title: listing.title,
-    category: listing.category,
-    description: listing.description,
-    listingPrice: Number(listing.listingPrice),
-    orderCount: c ?? 0,
-    designOutput: serializeOutput(output),
-    quotes: quotes.map(serializeQuote),
-    createdAt: listing.createdAt.toISOString(),
-    updatedAt: listing.updatedAt.toISOString(),
-  });
-});
+router.get(
+  "/marketplace/listings/:id",
+  // Rate-limited because the first request for a listing can lazily generate
+  // and persist quotes (DB writes + supplier ranking compute).
+  mutateLimiter,
+  asyncHandler(async (req, res) => {
+    const params = parseOrThrow(GetMarketplaceListingParams, req.params);
+    const [listing] = await db
+      .select()
+      .from(marketplaceListingsTable)
+      .where(eq(marketplaceListingsTable.id, params.id));
+    if (!listing) throw notFound("Listing");
+    const [output] = await db
+      .select()
+      .from(designOutputsTable)
+      .where(eq(designOutputsTable.sessionId, listing.sessionId))
+      .orderBy(desc(designOutputsTable.createdAt))
+      .limit(1);
+    if (!output) throw notFound("Listing has no design output");
+    const [{ c }] = await db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(ordersTable)
+      .where(eq(ordersTable.marketplaceListingId, listing.id));
+    const quotes = await ensureQuotesForListing(listing.sessionId, output);
+    res.json({
+      id: listing.id,
+      sessionId: listing.sessionId,
+      userId: listing.userId,
+      creatorHandle: listing.creatorHandle,
+      title: listing.title,
+      category: listing.category,
+      description: listing.description,
+      listingPrice: Number(listing.listingPrice),
+      orderCount: c ?? 0,
+      designOutput: serializeOutput(output),
+      quotes: quotes.map(serializeQuote),
+      createdAt: listing.createdAt.toISOString(),
+      updatedAt: listing.updatedAt.toISOString(),
+    });
+  }),
+);
 
 router.post(
   "/marketplace/listings",
   requireAuth,
-  async (req, res): Promise<void> => {
-    const body = PublishListingBody.safeParse(req.body);
-    if (!body.success) {
-      res.status(400).json({ error: body.error.message });
-      return;
-    }
+  mutateLimiter,
+  asyncHandler(async (req, res) => {
+    const body = parseOrThrow(PublishListingBody, req.body);
     const userId = req.userId!;
-    const { sessionId, title, category, description, listingPrice } = body.data;
+    const { sessionId, title, category, description, listingPrice } = body;
 
     const [session] = await db
       .select()
       .from(designSessionsTable)
       .where(eq(designSessionsTable.id, sessionId));
-    if (!session) {
-      res.status(404).json({ error: "Session not found" });
-      return;
-    }
-    if (session.userId !== userId) {
-      res.status(403).json({ error: "Not session owner" });
-      return;
-    }
+    if (!session) throw notFound("Session");
+    if (session.userId !== userId) throw forbidden("Not session owner");
     if (session.status !== "ready") {
-      res.status(400).json({ error: "Session is not ready to publish" });
-      return;
+      throw badRequest("Session is not ready to publish");
     }
 
     const handle = await resolveHandle(userId);
@@ -343,10 +332,7 @@ router.post(
       .where(eq(designOutputsTable.sessionId, sessionId))
       .orderBy(desc(designOutputsTable.createdAt))
       .limit(1);
-    if (!output) {
-      res.status(400).json({ error: "Session has no design output" });
-      return;
-    }
+    if (!output) throw badRequest("Session has no design output");
     const [{ c }] = await db
       .select({ c: sql<number>`count(*)::int` })
       .from(ordersTable)
@@ -367,46 +353,33 @@ router.post(
       createdAt: listing.createdAt.toISOString(),
       updatedAt: listing.updatedAt.toISOString(),
     });
-  },
+  }),
 );
 
 router.delete(
   "/marketplace/listings/:id",
   requireAuth,
-  async (req, res): Promise<void> => {
-    const params = UnpublishListingParams.safeParse(req.params);
-    if (!params.success) {
-      res.status(400).json({ error: params.error.message });
-      return;
-    }
+  mutateLimiter,
+  asyncHandler(async (req, res) => {
+    const params = parseOrThrow(UnpublishListingParams, req.params);
     const [listing] = await db
       .select()
       .from(marketplaceListingsTable)
-      .where(eq(marketplaceListingsTable.id, params.data.id));
-    if (!listing) {
-      res.status(404).json({ error: "Listing not found" });
-      return;
-    }
-    if (listing.userId !== req.userId) {
-      res.status(403).json({ error: "Not owner" });
-      return;
-    }
+      .where(eq(marketplaceListingsTable.id, params.id));
+    if (!listing) throw notFound("Listing");
+    if (listing.userId !== req.userId) throw forbidden("Not owner");
     await db
       .delete(marketplaceListingsTable)
       .where(eq(marketplaceListingsTable.id, listing.id));
     res.sendStatus(204);
-  },
+  }),
 );
 
 router.get(
   "/marketplace/profile/:userId",
-  async (req, res): Promise<void> => {
-    const params = GetDesignerProfileParams.safeParse(req.params);
-    if (!params.success) {
-      res.status(400).json({ error: params.error.message });
-      return;
-    }
-    const targetUserId = params.data.userId;
+  asyncHandler(async (req, res) => {
+    const params = parseOrThrow(GetDesignerProfileParams, req.params);
+    const targetUserId = params.userId;
     const listings = await db
       .select()
       .from(marketplaceListingsTable)
@@ -444,7 +417,7 @@ router.get(
       totalOrders,
       totalPayouts: Number(totalPayouts ?? 0),
     });
-  },
+  }),
 );
 
 export default router;
