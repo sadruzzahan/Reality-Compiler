@@ -29,17 +29,11 @@ const SORTS = [
 
 const CATEGORIES = [
   "All categories",
-  "Consumer Electronics",
-  "Home Goods",
-  "Apparel & Wearables",
-  "Furniture",
-  "Kitchenware",
-  "Tools & Hardware",
-  "Sports & Outdoor",
-  "Toys & Games",
-  "Lighting",
-  "Personal Care",
-  "Other",
+  "Mechanical",
+  "Consumer",
+  "Apparel",
+  "Electronics",
+  "Replacement Parts",
 ] as const;
 
 export default function Marketplace() {

@@ -18,7 +18,7 @@ import {
   generateDesignSpec,
   generateConceptImageDataUrl,
 } from "../lib/designPipeline";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth, attachUserId } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
@@ -198,8 +198,8 @@ router.get("/sessions", requireAuth, async (req, res): Promise<void> => {
   res.json(summaries);
 });
 
-router.get("/sessions/stats", async (_req, res): Promise<void> => {
-  const summaries = await buildSummaries();
+router.get("/sessions/stats", attachUserId, async (req, res): Promise<void> => {
+  const summaries = req.userId ? await buildSummaries(req.userId) : [];
   const outputs = await db.select().from(designOutputsTable);
 
   const materialCounts = new Map<string, number>();
@@ -230,8 +230,11 @@ router.get("/sessions/stats", async (_req, res): Promise<void> => {
     .slice(0, 6)
     .map(([category, count]) => ({ category, count }));
 
+  const [{ totalCount }] = await db
+    .select({ totalCount: sql<number>`count(*)::int` })
+    .from(designSessionsTable);
   res.json({
-    totalSessions: summaries.length,
+    totalSessions: totalCount ?? 0,
     totalDesigns,
     avgCostLow: Math.round(avgCostLow * 100) / 100,
     avgCostHigh: Math.round(avgCostHigh * 100) / 100,

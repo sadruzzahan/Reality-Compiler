@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDistanceToNow } from "date-fns";
+import { Show } from "@clerk/react";
 
 export default function Home() {
   const [prompt, setPrompt] = useState("");
@@ -155,11 +156,12 @@ export default function Home() {
           </div>
         )}
 
+        <Show when="signed-in">
         <div className="mt-12">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-bold flex items-center gap-2">
               <Layers className="w-5 h-5 text-primary" />
-              Recent Sessions
+              Your Recent Sessions
             </h2>
             <Button variant="ghost" onClick={() => setLocation("/sessions")} className="font-mono text-xs">
               View All <ChevronRight className="w-4 h-4 ml-1" />
@@ -217,6 +219,7 @@ export default function Home() {
             </div>
           )}
         </div>
+        </Show>
       </section>
     </div>
   );

@@ -28,17 +28,11 @@ import {
 } from "@/components/ui/select";
 
 const CATEGORIES = [
-  "Consumer Electronics",
-  "Home Goods",
-  "Apparel & Wearables",
-  "Furniture",
-  "Kitchenware",
-  "Tools & Hardware",
-  "Sports & Outdoor",
-  "Toys & Games",
-  "Lighting",
-  "Personal Care",
-  "Other",
+  "Mechanical",
+  "Consumer",
+  "Apparel",
+  "Electronics",
+  "Replacement Parts",
 ] as const;
 
 interface Props {

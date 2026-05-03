@@ -45,7 +45,7 @@ You MUST return strictly valid JSON matching this TypeScript shape, no prose bef
 {
   "sessionTitle": string,            // <= 6 words, evocative title for this design session
   "productName": string,             // concrete product name
-  "category": string,                // one of: Consumer Electronics, Home Goods, Apparel & Wearables, Furniture, Kitchenware, Tools & Hardware, Sports & Outdoor, Toys & Games, Lighting, Personal Care, Other
+  "category": string,                // one of: Mechanical, Consumer, Apparel, Electronics, Replacement Parts
   "summary": string,                 // 2-3 sentences describing the design concept
   "primaryMaterial": string,         // single dominant material e.g. "Anodized Aluminum"
   "materials": string[],             // 3-7 distinct materials used
