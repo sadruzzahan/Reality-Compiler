@@ -196,13 +196,18 @@ function decodeCursor(raw: string, expectedSort: SortKey): CursorPayload {
  */
 async function resolveCreatorFilter(
   creator: string | undefined,
-): Promise<string | null | undefined> {
+): Promise<string | undefined> {
+  // Returns:
+  //   undefined → no creator filter requested.
+  //   string    → the userId to filter by. If `creator` looks like a
+  //               handle we try to resolve it; otherwise we treat the
+  //               value as an opaque userId. We never return null —
+  //               unknown handles fall back to the raw string so direct
+  //               userId callers keep working even if our handle table
+  //               is stale, and the SQL filter naturally yields zero
+  //               rows for genuinely-unknown ids.
   if (!creator) return undefined;
   const stripped = creator.startsWith("@") ? creator.slice(1) : creator;
-  // Handles cannot contain a leading `@` (already stripped) and are
-  // restricted to a small character set; anything else (Clerk-style
-  // `user_…` IDs, future provider IDs, etc.) is treated as an opaque
-  // userId and used directly.
   const looksLikeHandle = /^[a-z0-9][a-z0-9_-]{1,63}$/i.test(stripped);
   if (!looksLikeHandle) return stripped;
   const [row] = await db
@@ -210,9 +215,6 @@ async function resolveCreatorFilter(
     .from(marketplaceListingsTable)
     .where(eq(marketplaceListingsTable.creatorHandle, stripped))
     .limit(1);
-  // If we can't resolve the handle to a known creator, fall back to
-  // treating it as an opaque userId rather than 404'ing — this keeps
-  // direct-userId callers working even if their handle table is stale.
   return row?.userId ?? stripped;
 }
 
@@ -321,13 +323,6 @@ router.get(
     }
 
     const creatorUserId = await resolveCreatorFilter(params.creator);
-    if (params.creator && creatorUserId === null) {
-      // Creator filter was specified but no such designer exists —
-      // return an empty page deterministically rather than silently
-      // ignoring the filter.
-      res.json({ items: [], nextCursor: null });
-      return;
-    }
 
     const filters: ListingFilters = {
       q: params.q,
@@ -472,10 +467,6 @@ router.get(
       throw badRequest("minPrice must be less than or equal to maxPrice.");
     }
     const creatorUserId = await resolveCreatorFilter(params.creator);
-    if (params.creator && creatorUserId === null) {
-      res.json({ total: 0 });
-      return;
-    }
     const { whereSql } = buildFilterClauses({
       q: params.q,
       category: params.category,
